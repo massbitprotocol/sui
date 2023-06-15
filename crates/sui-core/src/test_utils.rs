@@ -411,7 +411,7 @@ pub fn make_dummy_tx(
         Intent::sui_transaction(),
         vec![sender_sec],
     )
-    .verify_with_params(&Default::default())
+    .verify(&Default::default())
     .unwrap()
 }
 
