@@ -235,12 +235,18 @@ struct FeatureFlags {
     // regardless of their previous state in the store.
     #[serde(skip_serializing_if = "is_false")]
     simplified_unwrap_then_delete: bool,
+<<<<<<< HEAD
     // Enable upgraded multisig support
     #[serde(skip_serializing_if = "is_false")]
     upgraded_multisig_supported: bool,
     // If true minimum txn charge is a multiplier of the gas price
     #[serde(skip_serializing_if = "is_false")]
     txn_base_cost_as_multiplier: bool,
+=======
+
+    #[serde(skip_serializing_if = "is_false")]
+    shared_object_deletion: bool,
+>>>>>>> 051f139de6 (allow passing shared objects by value)
 }
 
 fn is_false(b: &bool) -> bool {
@@ -808,12 +814,17 @@ impl ProtocolConfig {
         self.feature_flags.simplified_unwrap_then_delete
     }
 
+<<<<<<< HEAD
     pub fn supports_upgraded_multisig(&self) -> bool {
         self.feature_flags.upgraded_multisig_supported
     }
 
     pub fn txn_base_cost_as_multiplier(&self) -> bool {
         self.feature_flags.txn_base_cost_as_multiplier
+=======
+    pub fn shared_object_deletion(&self) -> bool {
+        self.feature_flags.shared_object_deletion
+>>>>>>> 051f139de6 (allow passing shared objects by value)
     }
 }
 
@@ -1365,11 +1376,18 @@ impl ProtocolConfig {
     pub fn set_max_tx_gas_for_testing(&mut self, max_tx_gas: u64) {
         self.max_tx_gas = Some(max_tx_gas)
     }
+
     pub fn set_execution_version_for_testing(&mut self, version: u64) {
         self.execution_version = Some(version)
     }
+<<<<<<< HEAD
     pub fn set_upgraded_multisig_for_testing(&mut self, val: bool) {
         self.feature_flags.upgraded_multisig_supported = val
+=======
+
+    pub fn set_shared_object_deletion(&mut self) {
+        self.feature_flags.shared_object_deletion = true
+>>>>>>> 051f139de6 (allow passing shared objects by value)
     }
     #[cfg(msim)]
     pub fn set_simplified_unwrap_then_delete(&mut self, val: bool) {

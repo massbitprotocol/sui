@@ -87,7 +87,7 @@ pub fn execute<Mode: ExecutionMode>(
     // execute commands
     let mut mode_results = Mode::empty_results();
     for (idx, command) in commands.into_iter().enumerate() {
-        if let Err(err) = execute_command::<Mode>(&mut context, &mut mode_results, command) {
+        if let Err(err) = execute_command::<Mode>(&mut context, &mut mode_results, command, protocol_config) {
             let object_runtime: &ObjectRuntime = context.session.get_native_extensions().get();
             // We still need to record the loaded child objects for replay
             let loaded_child_objects = object_runtime.loaded_child_objects();
@@ -129,7 +129,9 @@ fn execute_command<Mode: ExecutionMode>(
     context: &mut ExecutionContext<'_, '_, '_>,
     mode_results: &mut Mode::ExecutionResults,
     command: Command,
-) -> Result<(), ExecutionError> {
+    protocol_config: &ProtocolConfig,
+) -> Result<(), ExecutionError>
+{
     let mut argument_updates = Mode::empty_arguments();
     let results = match command {
         Command::MakeMoveVec(tag_opt, args) if args.is_empty() => {
@@ -173,13 +175,13 @@ fn execute_command<Mode: ExecutionMode>(
                     // empty args covered above
                     let (idx, arg) = arg_iter.next().unwrap();
                     let obj: ObjectValue =
-                        context.by_value_arg(CommandKind::MakeMoveVec, idx, arg)?;
+                        context.by_value_arg(CommandKind::MakeMoveVec, idx, arg, protocol_config)?;
                     obj.write_bcs_bytes(&mut res);
                     (obj.used_in_non_entry_move_call, obj.type_)
                 }
             };
             for (idx, arg) in arg_iter {
-                let value: Value = context.by_value_arg(CommandKind::MakeMoveVec, idx, arg)?;
+                let value: Value = context.by_value_arg(CommandKind::MakeMoveVec, idx, arg, protocol_config)?;
                 check_param_type::<Mode>(context, idx, &value, &elem_ty)?;
                 used_in_non_entry_move_call =
                     used_in_non_entry_move_call || value.was_used_in_non_entry_move_call();
@@ -203,10 +205,10 @@ fn execute_command<Mode: ExecutionMode>(
             let objs: Vec<ObjectValue> = objs
                 .into_iter()
                 .enumerate()
-                .map(|(idx, arg)| context.by_value_arg(CommandKind::TransferObjects, idx, arg))
+                .map(|(idx, arg)| context.by_value_arg(CommandKind::TransferObjects, idx, arg, protocol_config))
                 .collect::<Result<_, _>>()?;
             let addr: SuiAddress =
-                context.by_value_arg(CommandKind::TransferObjects, objs.len(), addr_arg)?;
+                context.by_value_arg(CommandKind::TransferObjects, objs.len(), addr_arg, protocol_config)?;
             for obj in objs {
                 obj.ensure_public_transfer_eligible()?;
                 context.transfer_object(obj, addr)?;
@@ -227,7 +229,7 @@ fn execute_command<Mode: ExecutionMode>(
                 .into_iter()
                 .map(|amount_arg| {
                     let amount: u64 =
-                        context.by_value_arg(CommandKind::SplitCoins, 1, amount_arg)?;
+                        context.by_value_arg(CommandKind::SplitCoins, 1, amount_arg, protocol_config)?;
                     let new_coin_id = context.fresh_id()?;
                     let new_coin = coin.split(amount, UID::new(new_coin_id))?;
                     let coin_type = obj.type_.clone();
@@ -253,7 +255,7 @@ fn execute_command<Mode: ExecutionMode>(
             let coins: Vec<ObjectValue> = coin_args
                 .into_iter()
                 .enumerate()
-                .map(|(idx, arg)| context.by_value_arg(CommandKind::MergeCoins, idx + 1, arg))
+                .map(|(idx, arg)| context.by_value_arg(CommandKind::MergeCoins, idx + 1, arg, protocol_config))
                 .collect::<Result<_, _>>()?;
             for (idx, coin) in coins.into_iter().enumerate() {
                 if target.type_ != coin.type_ {
@@ -308,13 +310,14 @@ fn execute_command<Mode: ExecutionMode>(
                 loaded_type_arguments,
                 arguments,
                 /* is_init */ false,
+                protocol_config,
             );
 
             context.reset_linkage();
             return_values?
         }
         Command::Publish(modules, dep_ids) => {
-            execute_move_publish::<Mode>(context, &mut argument_updates, modules, dep_ids)?
+            execute_move_publish::<Mode>(context, &mut argument_updates, modules, dep_ids, protocol_config)?
         }
         Command::Upgrade(modules, dep_ids, current_package_id, upgrade_ticket) => {
             execute_move_upgrade::<Mode>(
@@ -323,6 +326,7 @@ fn execute_command<Mode: ExecutionMode>(
                 dep_ids,
                 current_package_id,
                 upgrade_ticket,
+                protocol_config
             )?
         }
     };
@@ -341,7 +345,9 @@ fn execute_move_call<Mode: ExecutionMode>(
     type_arguments: Vec<Type>,
     arguments: Vec<Argument>,
     is_init: bool,
-) -> Result<Vec<Value>, ExecutionError> {
+    protocol_config: &ProtocolConfig
+) -> Result<Vec<Value>, ExecutionError>
+{
     // check that the function is either an entry function or a valid public function
     let LoadedFunctionInfo {
         kind,
@@ -358,7 +364,7 @@ fn execute_move_call<Mode: ExecutionMode>(
     )?;
     // build the arguments, storing meta data about by-mut-ref args
     let (tx_context_kind, by_mut_ref, serialized_arguments) =
-        build_move_args::<Mode>(context, module_id, function, kind, &signature, &arguments)?;
+        build_move_args::<Mode>(context, module_id, function, kind, &signature, &arguments, protocol_config)?;
     // invoke the VM
     let SerializedReturnValues {
         mutable_reference_outputs,
@@ -466,7 +472,9 @@ fn execute_move_publish<Mode: ExecutionMode>(
     argument_updates: &mut Mode::ArgumentUpdates,
     module_bytes: Vec<Vec<u8>>,
     dep_ids: Vec<ObjectID>,
-) -> Result<Vec<Value>, ExecutionError> {
+    protocol_config: &ProtocolConfig,
+) -> Result<Vec<Value>, ExecutionError>
+{
     assert_invariant!(
         !module_bytes.is_empty(),
         "empty package is checked in transaction input checker"
@@ -529,6 +537,7 @@ fn execute_move_upgrade<Mode: ExecutionMode>(
     dep_ids: Vec<ObjectID>,
     current_package_id: ObjectID,
     upgrade_ticket_arg: Argument,
+    protocol_config: &ProtocolConfig,
 ) -> Result<Vec<Value>, ExecutionError>
 {
     assert_invariant!(
@@ -546,7 +555,7 @@ fn execute_move_upgrade<Mode: ExecutionMode>(
     let upgrade_ticket: UpgradeTicket = {
         let mut ticket_bytes = Vec::new();
         let ticket_val: Value =
-            context.by_value_arg(CommandKind::Upgrade, 0, upgrade_ticket_arg)?;
+            context.by_value_arg(CommandKind::Upgrade, 0, upgrade_ticket_arg, protocol_config)?;
         check_param_type::<Mode>(context, 0, &ticket_val, &upgrade_ticket_type)?;
         ticket_val.write_bcs_bytes(&mut ticket_bytes);
         bcs::from_bytes(&ticket_bytes).map_err(|_| {
@@ -861,7 +870,9 @@ fn init_modules<Mode: ExecutionMode>(
     context: &mut ExecutionContext<'_, '_, '_>,
     argument_updates: &mut Mode::ArgumentUpdates,
     modules: &[CompiledModule],
-) -> Result<(), ExecutionError> {
+    protocol_config: &ProtocolConfig,
+) -> Result<(), ExecutionError>
+{
     let modules_to_init = modules.iter().filter_map(|module| {
         for fdef in &module.function_defs {
             let fhandle = module.function_handle_at(fdef.function);
@@ -882,6 +893,7 @@ fn init_modules<Mode: ExecutionMode>(
             vec![],
             vec![],
             /* is_init */ true,
+            protocol_config,
         )?;
 
         assert_invariant!(
@@ -1168,7 +1180,9 @@ fn build_move_args<Mode: ExecutionMode>(
     function_kind: FunctionKind,
     signature: &LoadedFunctionInstantiation,
     args: &[Argument],
-) -> Result<ArgInfo, ExecutionError> {
+    protocol_config: &ProtocolConfig,
+) -> Result<ArgInfo, ExecutionError>
+{
     // check the arity
     let parameters = &signature.parameters;
     let tx_ctx_kind = match parameters.last() {
@@ -1245,7 +1259,7 @@ fn build_move_args<Mode: ExecutionMode>(
             }
             Type::Reference(inner) => (context.borrow_arg(idx, arg)?, inner),
             t => {
-                let value = context.by_value_arg(command_kind, idx, arg)?;
+                let value = context.by_value_arg(command_kind, idx, arg, protocol_config)?;
                 (value, t)
             }
         };
