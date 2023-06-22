@@ -4,8 +4,8 @@
 
 use crate::{
     compute_sha3_checksum, create_file_metadata, FileCompression, FileMetadata, FileType, Manifest,
-    ManifestV1, FILE_MAX_BYTES, MAGIC_BYTES, MANIFEST_FILE_MAGIC, OBJECT_FILE_MAGIC,
-    OBJECT_REF_BYTES, REFERENCE_FILE_MAGIC, SEQUENCE_NUM_BYTES,
+    ManifestV1, DEFAULT_CONCURRENCY, FILE_MAX_BYTES, MAGIC_BYTES, MANIFEST_FILE_MAGIC,
+    OBJECT_FILE_MAGIC, OBJECT_REF_BYTES, REFERENCE_FILE_MAGIC, SEQUENCE_NUM_BYTES,
 };
 use anyhow::{anyhow, Context, Result};
 use backoff::future::retry;
@@ -227,9 +227,11 @@ impl StateSnapshotWriterV1 {
         local_store_config: &ObjectStoreConfig,
         remote_store_config: &ObjectStoreConfig,
         file_compression: FileCompression,
-        concurrency: NonZeroUsize,
+        concurrency: Option<NonZeroUsize>,
         include_wrapped_tombstone: bool,
     ) -> Result<Self> {
+        let concurrency =
+            concurrency.unwrap_or_else(|| NonZeroUsize::new(DEFAULT_CONCURRENCY).unwrap());
         let epoch_dir = format!("epoch_{epoch}");
         let remote_object_store = remote_store_config.make()?;
         // Delete remote epoch dir if it exists

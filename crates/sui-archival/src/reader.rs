@@ -18,6 +18,7 @@ use std::time::Duration;
 use sui_config::node::ArchiveReaderConfig;
 use sui_storage::object_store::util::get;
 use sui_storage::{make_iterator, verify_checkpoint};
+use sui_types::committee::EpochId;
 use sui_types::messages_checkpoint::{
     CertifiedCheckpointSummary, CheckpointSequenceNumber,
     FullCheckpointContents as CheckpointContents, VerifiedCheckpoint, VerifiedCheckpointContents,
@@ -265,6 +266,80 @@ impl ArchiveReader {
             .await
     }
 
+    pub async fn load_summaries_upto<S>(&self, epoch: EpochId, store: S) -> Result<()>
+    where
+        S: WriteStore + Clone,
+        <S as ReadStore>::Error: std::error::Error,
+    {
+        let manifest = self.manifest.lock().await.clone();
+
+        if epoch > manifest.epoch_num() {
+            return Err(anyhow!("Epoch {} not yet archived", epoch));
+        }
+
+        let files = manifest.files();
+        if files.is_empty() {
+            return Err(anyhow!("Unexpected empty archive store"));
+        }
+
+        let mut summary_files: Vec<_> = files
+            .clone()
+            .into_iter()
+            .filter(|f| f.file_type == FileType::CheckpointSummary)
+            .collect();
+        summary_files.sort_by_key(|f| f.checkpoint_seq_range.start);
+
+        assert!(summary_files
+            .windows(2)
+            .all(|w| w[1].checkpoint_seq_range.start == w[0].checkpoint_seq_range.end));
+
+        assert_eq!(files.first().unwrap().checkpoint_seq_range.start, 0);
+
+        // Genesis checkpoint must already exist
+        assert!(store
+            .get_checkpoint_by_sequence_number(0)
+            .map_err(|e| anyhow!("Failed to fetch genesis checkpoint: {e}"))?
+            .is_some());
+        let start_index = 1;
+        let end_index = match files.binary_search_by_key(&epoch, |s| s.epoch_num) {
+            Ok(index) => index,
+            // If epoch is not found, return the last index. This is possible, for example, if
+            // we are trying to sync up to the beginning of the current network epoch, which
+            // will not yet have been archived.
+            Err(_) => files.len() - 1,
+        };
+
+        let remote_object_store = self.remote_object_store.clone();
+        futures::stream::iter(files.iter())
+            .enumerate()
+            .filter(|(index, _s)| future::ready(*index >= start_index && *index < end_index))
+            .map(|(_, summary_metadata)| {
+                let remote_object_store = remote_object_store.clone();
+                async move {
+                    let summary_data =
+                        get(&summary_metadata.file_path(), remote_object_store.clone()).await?;
+                    Ok::<Bytes, anyhow::Error>(summary_data)
+                }
+            })
+            .boxed()
+            .buffered(self.concurrency)
+            .try_for_each(|summary_data| {
+                let result: Result<(), anyhow::Error> =
+                    make_iterator::<CertifiedCheckpointSummary, Reader<Bytes>>(
+                        SUMMARY_FILE_MAGIC,
+                        summary_data.reader(),
+                    )
+                    .and_then(|mut summary_iter| {
+                        summary_iter.try_for_each(|summary| {
+                            Self::get_or_insert_verified_checkpoint(&store, summary)?;
+                            Ok::<(), anyhow::Error>(())
+                        })
+                    });
+                futures::future::ready(result)
+            })
+            .await
+    }
+
     /// Return latest available checkpoint in archive
     pub async fn latest_available_checkpoint(&self) -> Result<CheckpointSequenceNumber> {
         let manifest = self.manifest.lock().await.clone();
@@ -326,14 +401,11 @@ impl ArchiveReader {
                 let verified_checkpoint =
                     verify_checkpoint(&prev_checkpoint, &store, certified_checkpoint)
                         .map_err(|_| anyhow!("Checkpoint verification failed"))?;
-                // Insert checkpoint summary
+                // Insert checkpoint summary - this also ensures highest_verified_checkpoint
+                // watermark is set, and epoch_last_checkpoint_map is updated
                 store
                     .insert_checkpoint(&verified_checkpoint)
                     .map_err(|e| anyhow!("Failed to insert checkpoint: {e}"))?;
-                // Update highest verified checkpoint watermark
-                store
-                    .update_highest_verified_checkpoint(&verified_checkpoint)
-                    .expect("store operation should not fail");
                 Ok::<VerifiedCheckpoint, anyhow::Error>(verified_checkpoint)
             })
             .map_err(|e| anyhow!("Failed to get verified checkpoint: {:?}", e))

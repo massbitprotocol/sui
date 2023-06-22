@@ -24,6 +24,7 @@ use reqwest::Client;
 use sui_core::authority::CHAIN_IDENTIFIER;
 use sui_core::consensus_adapter::LazyNarwhalClient;
 use sui_json_rpc::api::JsonRpcMetrics;
+use sui_snapshot::SnapshotRestorer;
 use sui_types::digests::ChainIdentifier;
 use sui_types::message_envelope::get_google_jwk_bytes;
 use sui_types::sui_system_state::SuiSystemState;
@@ -269,7 +270,8 @@ impl SuiNode {
             &config.db_path().join("store"),
             Some(perpetual_options.options),
         ));
-        let is_genesis = perpetual_tables
+
+        let mut is_genesis = perpetual_tables
             .database_is_empty()
             .expect("Database read should not fail at init.");
         let store = AuthorityStore::open(
@@ -312,17 +314,6 @@ impl SuiNode {
             Self::start_jwk_updater();
         }
 
-        // the database is empty at genesis time
-        if is_genesis {
-            // When we are opening the db table, the only time when it's safe to
-            // check SUI conservation is at genesis. Otherwise we may be in the middle of
-            // an epoch and the SUI conservation check will fail. This also initialize
-            // the expected_network_sui_amount table.
-            store
-                .expensive_check_sui_conservation(&epoch_store)
-                .expect("SUI conservation check cannot fail at genesis");
-        }
-
         let effective_buffer_stake = epoch_store.get_effective_buffer_stake_bps();
         let default_buffer_stake = epoch_store
             .protocol_config()
@@ -341,11 +332,74 @@ impl SuiNode {
             genesis.checkpoint_contents().clone(),
             &epoch_store,
         );
+        let chain_identifier = ChainIdentifier::from(*genesis.checkpoint().digest());
+        // It's ok if the value is already set due to data races.
+        let _ = CHAIN_IDENTIFIER.set(chain_identifier);
         let state_sync_store = RocksDbStore::new(
             store.clone(),
             committee_store.clone(),
             checkpoint_store.clone(),
         );
+
+        // Create network
+        // TODO only configure validators as seed/preferred peers for validators and not for
+        // fullnodes once we've had a chance to re-work fullnode configuration generation.
+        let (trusted_peer_change_tx, trusted_peer_change_rx) = watch::channel(Default::default());
+
+        // Create network
+        // TODO only configure validators as seed/preferred peers for validators and not for
+        // fullnodes once we've had a chance to re-work fullnode configuration generation.
+        let archive_readers = ArchiveReaderBalancer::new(config.archive_reader_config())?;
+        let (trusted_peer_change_tx, trusted_peer_change_rx) = watch::channel(Default::default());
+
+        if let Some(snapshot_restore_config) = config.snapshot_restore_config {
+            if perpetual_tables
+                .database_is_empty()
+                .expect("Database read should not fail at init.")
+            {
+                let restorer = SnapshotRestorer::new(
+                    snapshot_restore_config,
+                    perpetual_tables.clone(),
+                    archive_readers.clone(),
+                )
+                .await?;
+                info!("Restoring from snapshot");
+                restorer.run().await.expect("Snapshot restoration failed");
+
+                // Many startup components need to be re-initialized now that we have
+                // run genesis, populated data into perpetual and checkpoint dbs, and are at
+                // a new epoch with a new committee. To make things far easier to reason about,
+                // recurse here and allow pre-existing components to be re-initialized from
+                // new state.
+                return SuiNode::start_async(
+                    &config,
+                    registry_service,
+                    node_once_cell,
+                    custom_rpc_runtime,
+                )
+                .await?;
+            }
+        }
+
+        let (p2p_network, discovery_handle, state_sync_handle) = Self::create_p2p_network(
+            &config,
+            state_sync_store.clone(),
+            chain_identifier,
+            trusted_peer_change_rx,
+            archive_readers.clone(),
+            &prometheus_registry,
+        )?;
+
+        // the database is empty at genesis time
+        if is_genesis {
+            // When we are opening the db table, the only time when it's safe to
+            // check SUI conservation is at genesis. Otherwise we may be in the middle of
+            // an epoch and the SUI conservation check will fail. This also initialize
+            // the expected_network_sui_amount table.
+            store
+                .expensive_check_sui_conservation(&epoch_store)
+                .expect("SUI conservation check cannot fail at genesis");
+        }
 
         let index_store = if is_full_node && config.enable_index_processing {
             Some(Arc::new(IndexStore::new(
@@ -359,23 +413,6 @@ impl SuiNode {
             None
         };
 
-        let chain_identifier = ChainIdentifier::from(*genesis.checkpoint().digest());
-        // It's ok if the value is already set due to data races.
-        let _ = CHAIN_IDENTIFIER.set(chain_identifier);
-
-        // Create network
-        // TODO only configure validators as seed/preferred peers for validators and not for
-        // fullnodes once we've had a chance to re-work fullnode configuration generation.
-        let archive_readers = ArchiveReaderBalancer::new(config.archive_reader_config())?;
-        let (trusted_peer_change_tx, trusted_peer_change_rx) = watch::channel(Default::default());
-        let (p2p_network, discovery_handle, state_sync_handle) = Self::create_p2p_network(
-            &config,
-            state_sync_store.clone(),
-            chain_identifier,
-            trusted_peer_change_rx,
-            archive_readers.clone(),
-            &prometheus_registry,
-        )?;
         // We must explicitly send this instead of relying on the initial value to trigger
         // watch value change, so that state-sync is able to process it.
         send_trusted_peer_change(

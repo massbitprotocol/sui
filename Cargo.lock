@@ -10215,6 +10215,7 @@ dependencies = [
  "sui-network",
  "sui-protocol-config",
  "sui-simulator",
+ "sui-snapshot",
  "sui-storage",
  "sui-telemetry",
  "sui-tls",

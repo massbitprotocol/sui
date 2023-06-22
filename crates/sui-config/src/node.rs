@@ -22,6 +22,7 @@ use sui_keys::keypair_file::{read_authority_keypair_from_file, read_keypair_from
 use sui_protocol_config::SupportedProtocolVersions;
 use sui_storage::object_store::ObjectStoreConfig;
 use sui_types::base_types::{ObjectID, SuiAddress};
+use sui_types::committee::EpochId;
 use sui_types::crypto::AuthorityPublicKeyBytes;
 use sui_types::crypto::KeypairTraits;
 use sui_types::crypto::NetworkKeyPair;
@@ -137,6 +138,9 @@ pub struct NodeConfig {
 
     #[serde(default)]
     pub state_archive_read_config: Vec<StateArchiveConfig>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub snapshot_restore_config: Option<SnapshotRestoreConfig>,
 }
 
 fn default_authority_store_pruning_config() -> AuthorityStorePruningConfig {
@@ -592,6 +596,18 @@ pub struct StateArchiveConfig {
     pub object_store_config: Option<ObjectStoreConfig>,
     pub concurrency: usize,
     pub use_for_pruning_watermark: bool,
+}
+
+#[derive(Default, Debug, Clone, Deserialize, Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub struct SnapshotRestoreConfig {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub object_store_config: Option<ObjectStoreConfig>,
+    pub epoch: EpochId,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub download_concurrency: Option<NonZeroUsize>,
+    #[serde(default)]
+    pub disable_verify: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize, Eq)]

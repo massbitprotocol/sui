@@ -11,8 +11,8 @@ use std::path::PathBuf;
 use sui_config::node::{
     default_enable_index_processing, default_end_of_epoch_broadcast_channel_capacity,
     AuthorityKeyPairWithPath, AuthorityStorePruningConfig, DBCheckpointConfig,
-    ExpensiveSafetyCheckConfig, Genesis, KeyPairWithPath, StateArchiveConfig,
-    DEFAULT_GRPC_CONCURRENCY_LIMIT,
+    ExpensiveSafetyCheckConfig, Genesis, KeyPairWithPath, SnapshotRestoreConfig,
+    StateArchiveConfig, DEFAULT_GRPC_CONCURRENCY_LIMIT,
 };
 use sui_config::p2p::{P2pConfig, SeedPeer};
 use sui_config::{
@@ -152,6 +152,7 @@ impl ValidatorConfigBuilder {
             state_debug_dump_config: Default::default(),
             state_archive_write_config: StateArchiveConfig::default(),
             state_archive_read_config: vec![],
+            snapshot_restore_config: None,
         }
     }
 
@@ -183,6 +184,7 @@ pub struct FullnodeConfigBuilder {
     p2p_external_address: Option<Multiaddr>,
     p2p_listen_address: Option<SocketAddr>,
     network_key_pair: Option<KeyPairWithPath>,
+    snapshot_restore_config: Option<SnapshotRestoreConfig>,
 }
 
 impl FullnodeConfigBuilder {
@@ -270,6 +272,14 @@ impl FullnodeConfigBuilder {
             self.network_key_pair =
                 Some(KeyPairWithPath::new(SuiKeyPair::Ed25519(network_key_pair)));
         }
+        self
+    }
+
+    pub fn with_snapshot_restore_config(
+        mut self,
+        snapshot_restore_config: SnapshotRestoreConfig,
+    ) -> Self {
+        self.snapshot_restore_config = Some(snapshot_restore_config);
         self
     }
 
@@ -380,6 +390,7 @@ impl FullnodeConfigBuilder {
             state_debug_dump_config: Default::default(),
             state_archive_write_config: StateArchiveConfig::default(),
             state_archive_read_config: vec![],
+            snapshot_restore_config: self.snapshot_restore_config,
         }
     }
 }
