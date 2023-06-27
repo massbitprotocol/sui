@@ -22,7 +22,7 @@ use thiserror::Error;
 pub type QuorumDriverResult = Result<QuorumDriverResponse, QuorumDriverError>;
 
 pub type QuorumDriverEffectsQueueResult =
-    Result<(VerifiedTransaction, QuorumDriverResponse), (TransactionDigest, QuorumDriverError)>;
+    Result<(Transaction, QuorumDriverResponse), (TransactionDigest, QuorumDriverError)>;
 
 /// Client facing errors regarding transaction submission via Quorum Driver.
 /// Every invariant needs detailed documents to instruct client handling.
