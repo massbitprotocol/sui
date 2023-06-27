@@ -208,11 +208,9 @@ where
             )
         });
 
-    checkpoint
-        .verify_signature(&committee, &VerifyParams::default())
-        .map_err(|e| {
-            debug!("error verifying checkpoint: {e}");
-            checkpoint.clone()
-        })?;
+    checkpoint.verify_signatures(&committee).map_err(|e| {
+        debug!("error verifying checkpoint: {e}");
+        checkpoint.clone()
+    })?;
     Ok(VerifiedCheckpoint::new_unchecked(checkpoint))
 }

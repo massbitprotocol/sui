@@ -82,7 +82,9 @@ fn test_signed_values() {
         &sec1,
         AuthorityPublicKeyBytes::from(sec1.public()),
     );
-    assert!(v.verify(&committee, &Default::default()).is_ok());
+    assert!(v
+        .verify_authenticated(&committee, &Default::default())
+        .is_ok());
 
     let v = SignedTransaction::new(
         committee.epoch(),
@@ -90,7 +92,9 @@ fn test_signed_values() {
         &sec2,
         AuthorityPublicKeyBytes::from(sec2.public()),
     );
-    assert!(v.verify(&committee, &Default::default()).is_err());
+    assert!(v
+        .verify_authenticated(&committee, &Default::default())
+        .is_err());
 
     let v = SignedTransaction::new(
         committee.epoch(),
@@ -98,7 +102,9 @@ fn test_signed_values() {
         &sec3,
         AuthorityPublicKeyBytes::from(sec3.public()),
     );
-    assert!(v.verify(&committee, &Default::default()).is_err());
+    assert!(v
+        .verify_authenticated(&committee, &Default::default())
+        .is_err());
 
     let v = SignedTransaction::new(
         committee.epoch(),
@@ -106,7 +112,9 @@ fn test_signed_values() {
         &sec1,
         AuthorityPublicKeyBytes::from(sec1.public()),
     );
-    assert!(v.verify(&committee, &Default::default()).is_err());
+    assert!(v
+        .verify_authenticated(&committee, &Default::default())
+        .is_err());
 }
 
 #[test]
@@ -171,7 +179,9 @@ fn test_certificates() {
     sigs.push(v2.auth_sig().clone());
     let c =
         CertifiedTransaction::new(transaction.clone().into_message(), sigs, &committee).unwrap();
-    assert!(c.verify_signature(&committee, &Default::default()).is_ok());
+    assert!(c
+        .verify_signatures_authenticated(&committee, &Default::default())
+        .is_ok());
 
     let sigs = vec![v1.auth_sig().clone(), v3.auth_sig().clone()];
 
@@ -484,7 +494,7 @@ fn test_digest_caching() {
         AuthorityPublicKeyBytes::from(sec1.public()),
     );
     assert!(signed_tx
-        .verify_signature(&committee, &Default::default())
+        .verify_signatures_authenticated(&committee, &Default::default())
         .is_ok());
 
     let initial_digest = *signed_tx.digest();
@@ -1295,7 +1305,7 @@ fn test_certificate_digest() {
 
         let cert = CertifiedTransaction::new(transaction.clone().into_message(), sigs, &committee)
             .unwrap();
-        cert.verify_signature(&committee, &Default::default())
+        cert.verify_signatures_authenticated(&committee, &Default::default())
             .unwrap();
         cert
     };

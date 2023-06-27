@@ -850,12 +850,12 @@ impl LocalExec {
         let mut committee = authority_state.clone_committee_for_testing();
         committee.epoch = executed_epoch;
         let certificate = CertifiedTransaction::new(
-            sender_signed_tx.into_message(),
+            sender_signed_tx.clone().into_message(),
             vec![auth_vote.clone()],
             &committee,
         )
         .unwrap()
-        .verify(&committee)
+        .verify_committee_sigs_only(&committee, &sender_signed_tx)
         .unwrap();
 
         let certificate = &VerifiedExecutableTransaction::new_from_certificate(certificate.clone());

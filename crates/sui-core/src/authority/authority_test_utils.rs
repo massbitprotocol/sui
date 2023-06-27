@@ -65,6 +65,11 @@ pub async fn send_and_confirm_transaction_with_execution_error(
 > {
     // Make the initial request
     let epoch_store = authority.load_epoch_store_one_call_per_task();
+    let transaction = epoch_store
+        .signature_verifier
+        .verify_tx(&transaction)
+        .map(|_| VerifiedTransaction::new_from_verified(transaction))?;
+
     let response = authority
         .handle_transaction(&epoch_store, transaction.clone())
         .await?;
@@ -75,7 +80,7 @@ pub async fn send_and_confirm_transaction_with_execution_error(
     let certificate =
         CertifiedTransaction::new(transaction.into_message(), vec![vote.clone()], &committee)
             .unwrap()
-            .verify(&committee, &Default::default())
+            .verify_authenticated(&committee, &Default::default())
             .unwrap();
 
     if with_shared {
@@ -270,7 +275,7 @@ pub fn init_certified_transaction(
         epoch_store.committee(),
     )
     .unwrap()
-    .verify(epoch_store.committee(), &Default::default())
+    .verify_authenticated(epoch_store.committee(), &Default::default())
     .unwrap()
 }
 

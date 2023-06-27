@@ -14,8 +14,10 @@ use crate::digests::Digest;
 use crate::effects::{TransactionEffects, TransactionEffectsAPI};
 use crate::error::SuiResult;
 use crate::gas::GasCostSummary;
-use crate::message_envelope::{Envelope, Message, TrustedEnvelope, VerifiedEnvelope};
-use crate::signature::{GenericSignature, VerifyParams};
+use crate::message_envelope::{
+    Envelope, Message, TrustedEnvelope, UnauthenticatedMessage, VerifiedEnvelope,
+};
+use crate::signature::GenericSignature;
 use crate::storage::ReadStore;
 use crate::sui_serde::AsProtocolVersion;
 use crate::sui_serde::BigInt;
@@ -160,10 +162,6 @@ impl Message for CheckpointSummary {
         CheckpointDigest::new(default_hash(self))
     }
 
-    fn verify_message_signature(&self, _: &VerifyParams) -> SuiResult {
-        Ok(())
-    }
-
     fn verify_epoch(&self, epoch: EpochId) -> SuiResult {
         fp_ensure!(
             self.epoch == epoch,
@@ -172,6 +170,8 @@ impl Message for CheckpointSummary {
         Ok(())
     }
 }
+
+impl UnauthenticatedMessage for CheckpointSummary {}
 
 impl CheckpointSummary {
     pub fn new(
@@ -263,7 +263,7 @@ impl CertifiedCheckpointSummary {
         committee: &Committee,
         contents: Option<&CheckpointContents>,
     ) -> SuiResult {
-        self.verify_signature(committee, &Default::default())?;
+        self.verify_signatures(committee)?;
 
         if let Some(contents) = contents {
             let content_digest = *contents.digest();
@@ -296,8 +296,7 @@ pub struct CheckpointSignatureMessage {
 
 impl CheckpointSignatureMessage {
     pub fn verify(&self, committee: &Committee) -> SuiResult {
-        self.summary
-            .verify_signature(committee, &Default::default())
+        self.summary.verify_signatures(committee)
     }
 }
 
@@ -654,17 +653,14 @@ mod tests {
             })
             .collect();
 
-        signed_checkpoints.iter().for_each(|c| {
-            c.verify_signature(&committee, &Default::default())
-                .expect("signature ok")
-        });
+        signed_checkpoints
+            .iter()
+            .for_each(|c| c.verify_signatures(&committee).expect("signature ok"));
 
         // fails when not signed by member of committee
-        signed_checkpoints.iter().for_each(|c| {
-            assert!(c
-                .verify_signature(&committee2, &Default::default())
-                .is_err())
-        });
+        signed_checkpoints
+            .iter()
+            .for_each(|c| assert!(c.verify_signatures(&committee2).is_err()));
     }
 
     #[test]
@@ -739,7 +735,7 @@ mod tests {
         assert!(
             CertifiedCheckpointSummary::new(summary, sign_infos, &committee)
                 .unwrap()
-                .verify_signature(&committee, &Default::default())
+                .verify_signatures(&committee)
                 .is_err()
         )
     }

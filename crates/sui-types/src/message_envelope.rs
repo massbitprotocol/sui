@@ -62,13 +62,20 @@ pub trait Message {
 
     fn digest(&self) -> Self::DigestType;
 
-    /// Verify internal signatures, e.g. for Transaction we verify the user signature(s).
-    fn verify_message_signature(&self, verify_params: &VerifyParams) -> SuiResult;
-
     /// Verify that the message is from the correct epoch (e.g. for CertifiedCheckpointSummary
     /// we verify that the checkpoint is from the same epoch as the committee signatures).
     fn verify_epoch(&self, epoch: EpochId) -> SuiResult;
 }
+
+/// A message type that has an internal authenticator, such as SenderSignedData
+pub trait AuthenticatedMessage {
+    /// Verify internal signatures, e.g. for Transaction we verify the user signature(s).
+    fn verify_message_signature(&self, verify_params: &VerifyParams) -> SuiResult;
+}
+
+/// A marker trait to indicated !AuthenticatedMessage since rust does not allow negative trait
+/// bounds.
+pub trait UnauthenticatedMessage {}
 
 #[derive(Clone, Debug, Eq, Serialize, Deserialize)]
 pub struct Envelope<T: Message, S> {
@@ -151,7 +158,9 @@ impl<T: Message> Envelope<T, EmptySignInfo> {
             auth_signature: EmptySignInfo {},
         }
     }
+}
 
+impl<T: Message + AuthenticatedMessage> Envelope<T, EmptySignInfo> {
     pub fn verify_signature(&self, verify_params: &VerifyParams) -> SuiResult {
         self.data.verify_message_signature(verify_params)
     }
@@ -197,8 +206,13 @@ where
     pub fn epoch(&self) -> EpochId {
         self.auth_signature.epoch
     }
+}
 
-    pub fn verify_signature(
+impl<T> Envelope<T, AuthoritySignInfo>
+where
+    T: Message + AuthenticatedMessage + Serialize,
+{
+    pub fn verify_signatures_authenticated(
         &self,
         committee: &Committee,
         verify_params: &VerifyParams,
@@ -209,12 +223,33 @@ where
             .verify_secure(self.data(), Intent::sui_app(T::SCOPE), committee)
     }
 
-    pub fn verify(
+    pub fn verify_authenticated(
         self,
         committee: &Committee,
         verify_params: &VerifyParams,
     ) -> SuiResult<VerifiedEnvelope<T, AuthoritySignInfo>> {
-        self.verify_signature(committee, verify_params)?;
+        self.verify_signatures_authenticated(committee, verify_params)?;
+        Ok(VerifiedEnvelope::<T, AuthoritySignInfo>::new_from_verified(
+            self,
+        ))
+    }
+}
+
+impl<T> Envelope<T, AuthoritySignInfo>
+where
+    T: Message + UnauthenticatedMessage + Serialize,
+{
+    pub fn verify_signatures(&self, committee: &Committee) -> SuiResult {
+        self.data.verify_epoch(self.auth_sig().epoch)?;
+        self.auth_signature
+            .verify_secure(self.data(), Intent::sui_app(T::SCOPE), committee)
+    }
+
+    pub fn verify(
+        self,
+        committee: &Committee,
+    ) -> SuiResult<VerifiedEnvelope<T, AuthoritySignInfo>> {
+        self.verify_signatures(committee)?;
         Ok(VerifiedEnvelope::<T, AuthoritySignInfo>::new_from_verified(
             self,
         ))
@@ -264,10 +299,15 @@ where
     pub fn epoch(&self) -> EpochId {
         self.auth_signature.epoch
     }
+}
 
+impl<T, const S: bool> Envelope<T, AuthorityQuorumSignInfo<S>>
+where
+    T: Message + AuthenticatedMessage + Serialize,
+{
     // TODO: Eventually we should remove all calls to verify_signature
     // and make sure they all call verify to avoid repeated verifications.
-    pub fn verify_signature(
+    pub fn verify_signatures_authenticated(
         &self,
         committee: &Committee,
         verify_params: &VerifyParams,
@@ -278,12 +318,12 @@ where
             .verify_secure(self.data(), Intent::sui_app(T::SCOPE), committee)
     }
 
-    pub fn verify(
+    pub fn verify_authenticated(
         self,
         committee: &Committee,
         verify_params: &VerifyParams,
     ) -> SuiResult<VerifiedEnvelope<T, AuthorityQuorumSignInfo<S>>> {
-        self.verify_signature(committee, verify_params)?;
+        self.verify_signatures_authenticated(committee, verify_params)?;
         Ok(VerifiedEnvelope::<T, AuthorityQuorumSignInfo<S>>::new_from_verified(self))
     }
 
@@ -306,6 +346,25 @@ where
         self.data.verify_epoch(self.auth_sig().epoch)?;
         self.auth_signature
             .verify_secure(self.data(), Intent::sui_app(T::SCOPE), committee)?;
+        Ok(VerifiedEnvelope::<T, AuthorityQuorumSignInfo<S>>::new_from_verified(self))
+    }
+}
+
+impl<T, const S: bool> Envelope<T, AuthorityQuorumSignInfo<S>>
+where
+    T: Message + UnauthenticatedMessage + Serialize,
+{
+    pub fn verify_signatures(&self, committee: &Committee) -> SuiResult {
+        self.data.verify_epoch(self.auth_sig().epoch)?;
+        self.auth_signature
+            .verify_secure(self.data(), Intent::sui_app(T::SCOPE), committee)
+    }
+
+    pub fn verify(
+        self,
+        committee: &Committee,
+    ) -> SuiResult<VerifiedEnvelope<T, AuthorityQuorumSignInfo<S>>> {
+        self.verify_signatures(committee)?;
         Ok(VerifiedEnvelope::<T, AuthorityQuorumSignInfo<S>>::new_from_verified(self))
     }
 }

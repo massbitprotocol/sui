@@ -2,12 +2,9 @@
 // Copyright (c) Mysten Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-use sui_core::authority_client::AuthorityAPI;
-use sui_macros::sim_test;
 use sui_test_transaction_builder::TestTransactionBuilder;
 use sui_types::error::{SuiError, SuiResult};
 use sui_types::transaction::VerifiedTransaction;
-use sui_types::utils::make_zklogin_tx;
 use sui_types::utils::{get_zklogin_user_address, make_zklogin_tx, sign_zklogin_tx};
 use test_cluster::TestClusterBuilder;
 

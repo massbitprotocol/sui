@@ -56,7 +56,6 @@ impl AuthorityAPI for LocalAuthorityClient {
         if self.fault_config.fail_before_handle_transaction {
             return Err(SuiError::from("Mock error before handle_transaction"));
         }
-        let epoch_store = self.state.load_epoch_store_one_call_per_task();
         let state = self.state.clone();
         let epoch_store = self.state.load_epoch_store_one_call_per_task();
         let transaction = epoch_store
@@ -167,7 +166,11 @@ impl LocalAuthorityClient {
         {
             Ok(Some(effects)) => effects,
             _ => {
-                let certificate = certificate.verify(epoch_store.committee())?;
+                let certificate = epoch_store
+                    .signature_verifier
+                    .verify_cert(certificate)
+                    .await?;
+                //let certificate = certificate.verify(epoch_store.committee())?;
                 state
                     .enqueue_certificates_for_execution(vec![certificate.clone()], &epoch_store)?;
                 let effects = state.notify_read_effects(&certificate).await?;

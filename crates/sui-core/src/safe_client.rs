@@ -224,7 +224,7 @@ impl<C: Clone> SafeClient<C> {
     fn check_transaction_info(
         &self,
         digest: &TransactionDigest,
-        transaction: &VerifiedTransaction,
+        transaction: VerifiedTransaction,
         status: TransactionStatus,
     ) -> SuiResult<PlainTransactionInfoResponse> {
         fp_ensure!(
@@ -311,7 +311,7 @@ where
             .await?;
         let response = check_error!(
             self.address,
-            self.check_transaction_info(&digest, &transaction, response.status),
+            self.check_transaction_info(&digest, transaction, response.status),
             "Client error in handle_transaction"
         )?;
         Ok(response)
@@ -464,7 +464,7 @@ where
             VerifiedTransaction::new_unchecked(Transaction::new(transaction_info.transaction));
         let transaction_info = self.check_transaction_info(
             &request.transaction_digest,
-            &verified_tx,
+            verified_tx,
             transaction_info.status,
         )?;
 

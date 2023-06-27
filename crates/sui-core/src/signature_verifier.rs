@@ -16,7 +16,7 @@ use sui_types::{
     crypto::{AuthoritySignInfoTrait, VerificationObligation},
     digests::CertificateDigest,
     error::{SuiError, SuiResult},
-    message_envelope::Message,
+    message_envelope::{AuthenticatedMessage, Message},
     messages_checkpoint::SignedCheckpointSummary,
     signature::VerifyParams,
     transaction::{CertifiedTransaction, VerifiedCertificate},
@@ -404,7 +404,7 @@ pub fn batch_verify_certificates(
             .iter()
             // TODO: verify_signature currently checks the tx sig as well, which might be cached
             // already.
-            .map(|c| c.verify_signature(committee, &verify_params))
+            .map(|c| c.verify_signatures_authenticated(committee, &verify_params))
             .collect(),
 
         Err(e) => vec![Err(e)],

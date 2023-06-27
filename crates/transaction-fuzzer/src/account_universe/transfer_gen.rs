@@ -21,7 +21,7 @@ use sui_types::{
     error::{SuiError, UserInputError},
     object::Object,
     programmable_transaction_builder::ProgrammableTransactionBuilder,
-    transaction::{GasData, TransactionData, TransactionKind, VerifiedTransaction},
+    transaction::{GasData, Transaction, TransactionData, TransactionKind, VerifiedTransaction},
     utils::{to_sender_signed_transaction, to_sender_signed_transaction_with_multi_signers},
 };
 
