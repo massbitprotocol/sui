@@ -19,6 +19,7 @@ use crate::{verification_failure, TEST_SCENARIO_MODULE_NAME};
 pub const TRANSFER_MODULE: &IdentStr = ident_str!("transfer");
 pub const EVENT_MODULE: &IdentStr = ident_str!("event");
 pub const EVENT_FUNCTION: &IdentStr = ident_str!("emit");
+pub const RECEIVE_FUNCTION: &IdentStr = ident_str!("receive");
 pub const PUBLIC_TRANSFER_FUNCTIONS: &[&IdentStr] = &[
     ident_str!("public_transfer"),
     ident_str!("public_freeze_object"),
@@ -33,6 +34,7 @@ pub const TRANSFER_IMPL_FUNCTIONS: &[&IdentStr] = &[
     ident_str!("transfer_impl"),
     ident_str!("freeze_object_impl"),
     ident_str!("share_object_impl"),
+    ident_str!("receive_impl"),
 ];
 
 /// All transfer functions (the functions in `sui::transfer`) are "private" in that they are
@@ -107,6 +109,10 @@ fn verify_private_transfer(
     let fident = view.identifier_at(fhandle.name);
     // public transfer functions require `store` and have no additional rules
     if PUBLIC_TRANSFER_FUNCTIONS.contains(&fident) {
+        return Ok(());
+    }
+    // `receive` function does not require `store` and is public.
+    if fident == RECEIVE_FUNCTION {
         return Ok(());
     }
     if !PRIVATE_TRANSFER_FUNCTIONS.contains(&fident) {

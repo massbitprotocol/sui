@@ -15,7 +15,12 @@ use sui_types::{
     MOVE_STDLIB_PACKAGE_ID, SUI_FRAMEWORK_PACKAGE_ID,
 };
 
-use std::{collections::BTreeSet, path::PathBuf, str::FromStr, sync::Arc};
+use std::{
+    collections::{BTreeSet, HashSet},
+    path::PathBuf,
+    str::FromStr,
+    sync::Arc,
+};
 use sui_types::effects::{TransactionEffects, TransactionEffectsV1};
 use sui_types::execution_status::{
     CommandArgumentError, ExecutionFailureStatus, PackageUpgradeError,
@@ -236,6 +241,409 @@ impl UpgradeStateRunner {
 
         effects
     }
+}
+
+#[tokio::test]
+async fn test_tto_transfer() {
+    let mut runner = UpgradeStateRunner::new("tto").await;
+    let TransactionEffects::V1(effects) = runner
+        .run({
+            let mut builder = ProgrammableTransactionBuilder::new();
+            move_call! {
+                builder,
+                (runner.package.0)::M1::start()
+            };
+            builder.finish()
+        })
+        .await;
+    println!("effects: {:#?}", effects);
+
+    let created_addrs: HashSet<_> = effects.created.iter().map(|((i, _, _), _)| i).collect();
+
+    let child = effects
+        .created
+        .iter()
+        .find(|(_, owner)| match owner {
+            Owner::AddressOwner(j) => created_addrs.contains(&ObjectID::from(*j)),
+            _ => false,
+        })
+        .unwrap();
+
+    let parent = effects
+        .created
+        .iter()
+        .find(|(_, owner)| match owner {
+            Owner::AddressOwner(j) => !created_addrs.contains(&ObjectID::from(*j)),
+            _ => false,
+        })
+        .unwrap();
+
+    println!("parent: {:#?}", parent);
+    println!("child: {:#?}", child);
+
+    let TransactionEffects::V1(effects) = runner
+        .run({
+            let mut builder = ProgrammableTransactionBuilder::new();
+            let parent = builder.obj(ObjectArg::ImmOrOwnedObject(parent.0)).unwrap();
+            let child = builder.obj(ObjectArg::Receiving(child.0)).unwrap();
+            move_call! {
+                builder,
+                (runner.package.0)::M1::receiver(parent, child)
+            };
+            builder.finish()
+        })
+        .await;
+
+    println!("SECOND effects: {:#?}", effects);
+}
+
+#[tokio::test]
+async fn test_tto_unused_receiver() {
+    let mut runner = UpgradeStateRunner::new("tto").await;
+    let TransactionEffects::V1(effects) = runner
+        .run({
+            let mut builder = ProgrammableTransactionBuilder::new();
+            move_call! {
+                builder,
+                (runner.package.0)::M1::start()
+            };
+            builder.finish()
+        })
+        .await;
+    println!("effects: {:#?}", effects);
+
+    let created_addrs: HashSet<_> = effects.created.iter().map(|((i, _, _), _)| i).collect();
+
+    let child = effects
+        .created
+        .iter()
+        .find(|(_, owner)| match owner {
+            Owner::AddressOwner(j) => created_addrs.contains(&ObjectID::from(*j)),
+            _ => false,
+        })
+        .unwrap();
+
+    let parent = effects
+        .created
+        .iter()
+        .find(|(_, owner)| match owner {
+            Owner::AddressOwner(j) => !created_addrs.contains(&ObjectID::from(*j)),
+            _ => false,
+        })
+        .unwrap();
+
+    println!("parent: {:#?}", parent);
+    println!("child: {:#?}", child);
+
+    let TransactionEffects::V1(effects) = runner
+        .run({
+            let mut builder = ProgrammableTransactionBuilder::new();
+            let parent = builder.obj(ObjectArg::ImmOrOwnedObject(parent.0)).unwrap();
+            let child = builder.obj(ObjectArg::Receiving(child.0)).unwrap();
+            // move_call! {
+            //     builder,
+            //     (runner.package.0)::M1::receiver(parent, child)
+            // };
+            builder.finish()
+        })
+        .await;
+
+    println!("SECOND effects: {:#?}", effects);
+}
+
+#[tokio::test]
+async fn test_tto_pass_receiving_by_refs() {
+    let mut runner = UpgradeStateRunner::new("tto").await;
+    let TransactionEffects::V1(effects) = runner
+        .run({
+            let mut builder = ProgrammableTransactionBuilder::new();
+            move_call! {
+                builder,
+                (runner.package.0)::M1::start()
+            };
+            builder.finish()
+        })
+        .await;
+    println!("effects: {:#?}", effects);
+
+    let created_addrs: HashSet<_> = effects.created.iter().map(|((i, _, _), _)| i).collect();
+
+    let child = effects
+        .created
+        .iter()
+        .find(|(_, owner)| match owner {
+            Owner::AddressOwner(j) => created_addrs.contains(&ObjectID::from(*j)),
+            _ => false,
+        })
+        .unwrap();
+
+    let parent = effects
+        .created
+        .iter()
+        .find(|(_, owner)| match owner {
+            Owner::AddressOwner(j) => !created_addrs.contains(&ObjectID::from(*j)),
+            _ => false,
+        })
+        .unwrap();
+
+    println!("parent: {:#?}", parent);
+    println!("child: {:#?}", child);
+
+    let TransactionEffects::V1(effects) = runner
+        .run({
+            let mut builder = ProgrammableTransactionBuilder::new();
+            let parent = builder.obj(ObjectArg::ImmOrOwnedObject(parent.0)).unwrap();
+            let child = builder.obj(ObjectArg::Receiving(child.0)).unwrap();
+            move_call! {
+                builder,
+                (runner.package.0)::M1::invalid_call_immut_ref(parent, child)
+            };
+            builder.finish()
+        })
+        .await;
+
+    println!("SECOND effects: {:#?}", effects);
+}
+
+#[tokio::test]
+async fn test_tto_delete() {
+    let mut runner = UpgradeStateRunner::new("tto").await;
+    let TransactionEffects::V1(effects) = runner
+        .run({
+            let mut builder = ProgrammableTransactionBuilder::new();
+            move_call! {
+                builder,
+                (runner.package.0)::M1::start()
+            };
+            builder.finish()
+        })
+        .await;
+    println!("effects: {:#?}", effects);
+
+    let created_addrs: HashSet<_> = effects.created.iter().map(|((i, _, _), _)| i).collect();
+
+    let child = effects
+        .created
+        .iter()
+        .find(|(_, owner)| match owner {
+            Owner::AddressOwner(j) => created_addrs.contains(&ObjectID::from(*j)),
+            _ => false,
+        })
+        .unwrap();
+
+    let parent = effects
+        .created
+        .iter()
+        .find(|(_, owner)| match owner {
+            Owner::AddressOwner(j) => !created_addrs.contains(&ObjectID::from(*j)),
+            _ => false,
+        })
+        .unwrap();
+
+    println!("parent: {:#?}", parent);
+    println!("child: {:#?}", child);
+
+    let TransactionEffects::V1(effects) = runner
+        .run({
+            let mut builder = ProgrammableTransactionBuilder::new();
+            let parent = builder.obj(ObjectArg::ImmOrOwnedObject(parent.0)).unwrap();
+            let child = builder.obj(ObjectArg::Receiving(child.0)).unwrap();
+            move_call! {
+                builder,
+                (runner.package.0)::M1::deleter(parent, child)
+            };
+            builder.finish()
+        })
+        .await;
+
+    println!("SECOND effects: {:#?}", effects);
+}
+
+#[tokio::test]
+async fn test_tto_receive_delete_then_receive_stale() {
+    let mut runner = UpgradeStateRunner::new("tto").await;
+    let TransactionEffects::V1(effects) = runner
+        .run({
+            let mut builder = ProgrammableTransactionBuilder::new();
+            move_call! {
+                builder,
+                (runner.package.0)::M1::start()
+            };
+            builder.finish()
+        })
+        .await;
+    println!("effects: {:#?}", effects);
+
+    let created_addrs: HashSet<_> = effects.created.iter().map(|((i, _, _), _)| i).collect();
+
+    let child = effects
+        .created
+        .iter()
+        .find(|(_, owner)| match owner {
+            Owner::AddressOwner(j) => created_addrs.contains(&ObjectID::from(*j)),
+            _ => false,
+        })
+        .unwrap();
+
+    let parent = effects
+        .created
+        .iter()
+        .find(|(_, owner)| match owner {
+            Owner::AddressOwner(j) => !created_addrs.contains(&ObjectID::from(*j)),
+            _ => false,
+        })
+        .unwrap();
+
+    println!("parent: {:#?}", parent);
+    println!("child: {:#?}", child);
+
+    let TransactionEffects::V1(effects) = runner
+        .run({
+            let mut builder = ProgrammableTransactionBuilder::new();
+            let parent = builder.obj(ObjectArg::ImmOrOwnedObject(parent.0)).unwrap();
+            let child = builder.obj(ObjectArg::Receiving(child.0)).unwrap();
+            move_call! {
+                builder,
+                (runner.package.0)::M1::deleter(parent, child)
+            };
+            builder.finish()
+        })
+        .await;
+
+    println!("SECOND effects: {:#?}", effects);
+
+    let new_parent = effects
+        .mutated
+        .iter()
+        .find(|((id, _, _), _)| id == &parent.0 .0)
+        .unwrap()
+        .0;
+    let TransactionEffects::V1(effects) = runner
+        .run({
+            let mut builder = ProgrammableTransactionBuilder::new();
+            let parent = builder
+                .obj(ObjectArg::ImmOrOwnedObject(new_parent))
+                .unwrap();
+            let child = builder.obj(ObjectArg::Receiving(child.0)).unwrap();
+            move_call! {
+                builder,
+                (runner.package.0)::M1::deleter(parent, child)
+            };
+            builder.finish()
+        })
+        .await;
+
+    println!("THIRD effects: {:#?}", effects);
+}
+
+#[tokio::test]
+async fn test_tto_receive_transfer_then_receive_stale() {
+    let mut runner = UpgradeStateRunner::new("tto").await;
+    let TransactionEffects::V1(effects) = runner
+        .run({
+            let mut builder = ProgrammableTransactionBuilder::new();
+            move_call! {
+                builder,
+                (runner.package.0)::M1::start()
+            };
+            builder.finish()
+        })
+        .await;
+    println!("effects: {:#?}", effects);
+
+    let created_addrs: HashSet<_> = effects.created.iter().map(|((i, _, _), _)| i).collect();
+
+    let child = effects
+        .created
+        .iter()
+        .find(|(_, owner)| match owner {
+            Owner::AddressOwner(j) => created_addrs.contains(&ObjectID::from(*j)),
+            _ => false,
+        })
+        .unwrap();
+
+    let parent = effects
+        .created
+        .iter()
+        .find(|(_, owner)| match owner {
+            Owner::AddressOwner(j) => !created_addrs.contains(&ObjectID::from(*j)),
+            _ => false,
+        })
+        .unwrap();
+
+    println!("parent: {:#?}", parent);
+    println!("child: {:#?}", child);
+
+    let TransactionEffects::V1(effects) = runner
+        .run({
+            let mut builder = ProgrammableTransactionBuilder::new();
+            let parent = builder.obj(ObjectArg::ImmOrOwnedObject(parent.0)).unwrap();
+            let child = builder.obj(ObjectArg::Receiving(child.0)).unwrap();
+            move_call! {
+                builder,
+                (runner.package.0)::M1::send_back(parent, child)
+            };
+            builder.finish()
+        })
+        .await;
+
+    let new_child = effects
+        .mutated
+        .iter()
+        .find(|((id, _, _), _)| id == &child.0 .0)
+        .unwrap()
+        .0;
+    let new_parent = effects
+        .mutated
+        .iter()
+        .find(|((id, _, _), _)| id == &parent.0 .0)
+        .unwrap()
+        .0;
+    println!("new child = {:#?}", new_child);
+    println!("old child = {:#?}", child.0);
+
+    // this should fail
+    let TransactionEffects::V1(effects) = runner
+        .run({
+            let mut builder = ProgrammableTransactionBuilder::new();
+            let parent = builder
+                .obj(ObjectArg::ImmOrOwnedObject(new_parent))
+                .unwrap();
+            let child = builder.obj(ObjectArg::Receiving(child.0)).unwrap();
+            move_call! {
+                builder,
+                (runner.package.0)::M1::deleter(parent, child)
+            };
+            builder.finish()
+        })
+        .await;
+
+    println!("THIRD effects: {:#?}", effects);
+
+    // This should succeed. NB that the child object's object ref from before the previous txn is
+    // still valid. Note that we need to get the parent's version as that was updated.
+    let new_parent = effects
+        .mutated
+        .iter()
+        .find(|((id, _, _), _)| id == &parent.0 .0)
+        .unwrap()
+        .0;
+    let TransactionEffects::V1(effects) = runner
+        .run({
+            let mut builder = ProgrammableTransactionBuilder::new();
+            let parent = builder
+                .obj(ObjectArg::ImmOrOwnedObject(new_parent))
+                .unwrap();
+            let child = builder.obj(ObjectArg::Receiving(new_child)).unwrap();
+            move_call! {
+                builder,
+                (runner.package.0)::M1::deleter(parent, child)
+            };
+            builder.finish()
+        })
+        .await;
+
+    println!("FOURTH effects: {:#?}", effects);
 }
 
 #[tokio::test]

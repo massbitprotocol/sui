@@ -18,7 +18,7 @@ use sui_types::{
     error::VMMemoryLimitExceededSubStatusCode,
     metrics::LimitsMetrics,
     object::{Data, MoveObject, Owner},
-    storage::ChildObjectResolver,
+    storage::RuntimeObjectResolver,
 };
 pub(super) struct ChildObject {
     pub(super) owner: ObjectID,
@@ -37,8 +37,8 @@ pub(crate) struct ChildObjectEffect {
 }
 
 struct Inner<'a> {
-    // used for loading child objects
-    resolver: &'a dyn ChildObjectResolver,
+    // used for loading child and sent objects
+    resolver: &'a dyn RuntimeObjectResolver,
     // cached objects from the resolver. An object might be in this map but not in the store
     // if it's existence was queried, but the value was not used.
     cached_objects: BTreeMap<ObjectID, Option<MoveObject>>,
@@ -73,53 +73,55 @@ pub(crate) enum ObjectResult<V> {
 }
 
 impl<'a> Inner<'a> {
+    fn fetch_object_from_store(
+        &self,
+        owner: Owner,
+        child: ObjectID,
+    ) -> PartialVMResult<Option<MoveObject>> {
+        let child_opt = self
+            .resolver
+            .read_child_object(owner, &child)
+            .map_err(|msg| {
+                PartialVMError::new(StatusCode::STORAGE_ERROR).with_message(format!("{msg}"))
+            })?;
+        let obj_opt = if let Some(object) = child_opt {
+            // guard against bugs in `read_child_object`: if it returns a child object such that
+            // C.parent != parent, we raise an invariant violation
+            if owner != object.owner {
+                return Err(
+                    PartialVMError::new(StatusCode::STORAGE_ERROR).with_message(format!(
+                        "Bad owner for {child}. \
+                        Expected owner {owner} but found owner {}",
+                        object.owner
+                    )),
+                );
+            }
+            match object.data {
+                Data::Package(_) => {
+                    return Err(PartialVMError::new(StatusCode::STORAGE_ERROR).with_message(
+                        format!(
+                            "Mismatched object type for {child}. \
+                                Expected a Move object but found a Move package"
+                        ),
+                    ))
+                }
+                Data::Move(mo @ MoveObject { .. }) => Some(mo),
+            }
+        } else {
+            None
+        };
+        Ok(obj_opt)
+    }
+
+    #[allow(clippy::map_entry)]
     fn get_or_fetch_object_from_store(
         &mut self,
         parent: ObjectID,
         child: ObjectID,
     ) -> PartialVMResult<Option<&MoveObject>> {
         let cached_objects_count = self.cached_objects.len() as u64;
-        if let btree_map::Entry::Vacant(e) = self.cached_objects.entry(child) {
-            let child_opt = self
-                .resolver
-                .read_child_object(&parent, &child)
-                .map_err(|msg| {
-                    PartialVMError::new(StatusCode::STORAGE_ERROR).with_message(format!("{msg}"))
-                })?;
-            let obj_opt = if let Some(object) = child_opt {
-                // guard against bugs in `read_child_object`: if it returns a child object such that
-                // C.parent != parent, we raise an invariant violation
-                match &object.owner {
-                    Owner::ObjectOwner(id) => {
-                        if ObjectID::from(*id) != parent {
-                            return Err(PartialVMError::new(StatusCode::STORAGE_ERROR).with_message(
-                                format!("Bad owner for {child}. \
-                                Expected owner {parent} but found owner {id}")
-                            ))
-                        }
-                    }
-                    Owner::AddressOwner(_) | Owner::Immutable | Owner::Shared { .. } => {
-                        return Err(PartialVMError::new(StatusCode::STORAGE_ERROR).with_message(
-                            format!("Bad owner for {child}. \
-                            Expected an id owner {parent} but found an address, immutable, or shared owner")
-                        ))
-                    }
-                };
-                match object.data {
-                    Data::Package(_) => {
-                        return Err(PartialVMError::new(StatusCode::STORAGE_ERROR).with_message(
-                            format!(
-                                "Mismatched object type for {child}. \
-                                Expected a Move object but found a Move package"
-                            ),
-                        ))
-                    }
-                    Data::Move(mo @ MoveObject { .. }) => Some(mo),
-                }
-            } else {
-                None
-            };
-
+        if !self.cached_objects.contains_key(&child) {
+            let obj_opt = self.fetch_object_from_store(Owner::ObjectOwner(parent.into()), child)?;
             if let LimitThresholdCrossed::Hard(_, lim) = check_limit_by_meter!(
                 self.is_metered,
                 cached_objects_count,
@@ -138,8 +140,7 @@ impl<'a> Inner<'a> {
                             as u64,
                     ));
             };
-
-            e.insert(obj_opt);
+            self.cached_objects.insert(child, obj_opt);
         }
         Ok(self.cached_objects.get(&child).unwrap().as_ref())
     }
@@ -162,38 +163,51 @@ impl<'a> Inner<'a> {
             }
             Some(obj) => obj,
         };
-        // object exists, but the type does not match
-        if obj.type_() != &child_move_type {
-            return Ok(ObjectResult::MismatchedType);
-        }
-        let v = match Value::simple_deserialize(obj.contents(), &child_ty_layout) {
-            Some(v) => v,
-            None => return Err(
-                PartialVMError::new(StatusCode::FAILED_TO_DESERIALIZE_RESOURCE).with_message(
-                    format!("Failed to deserialize object {child} with type {child_move_type}",),
-                ),
-            ),
-        };
-        let global_value =
-            match GlobalValue::cached(v) {
-                Ok(gv) => gv,
-                Err(e) => {
-                    return Err(PartialVMError::new(StatusCode::STORAGE_ERROR).with_message(
-                        format!("Object {child} did not deserialize to a struct Value. Error: {e}"),
-                    ))
-                }
-            };
-        Ok(ObjectResult::Loaded((
-            child_ty.clone(),
-            child_move_type,
-            global_value,
-        )))
+        deserialize_move_object(obj, child_ty, child_ty_layout, child_move_type)
     }
+}
+
+fn deserialize_move_object(
+    obj: &MoveObject,
+    child_ty: &Type,
+    child_ty_layout: MoveTypeLayout,
+    child_move_type: MoveObjectType,
+) -> PartialVMResult<ObjectResult<(Type, MoveObjectType, GlobalValue)>> {
+    let child_id = obj.id();
+    // object exists, but the type does not match
+    if obj.type_() != &child_move_type {
+        return Ok(ObjectResult::MismatchedType);
+    }
+    let v = match Value::simple_deserialize(obj.contents(), &child_ty_layout) {
+        Some(v) => v,
+        None => {
+            return Err(
+                PartialVMError::new(StatusCode::FAILED_TO_DESERIALIZE_RESOURCE).with_message(
+                    format!("Failed to deserialize object {child_id} with type {child_move_type}",),
+                ),
+            )
+        }
+    };
+    let global_value = match GlobalValue::cached(v) {
+        Ok(gv) => gv,
+        Err(e) => {
+            return Err(
+                PartialVMError::new(StatusCode::STORAGE_ERROR).with_message(format!(
+                    "Object {child_id} did not deserialize to a struct Value. Error: {e}"
+                )),
+            )
+        }
+    };
+    Ok(ObjectResult::Loaded((
+        child_ty.clone(),
+        child_move_type,
+        global_value,
+    )))
 }
 
 impl<'a> ObjectStore<'a> {
     pub(super) fn new(
-        resolver: &'a dyn ChildObjectResolver,
+        resolver: &'a dyn RuntimeObjectResolver,
         is_metered: bool,
         constants: LocalProtocolConfig,
         metrics: Arc<LimitsMetrics>,
@@ -209,6 +223,29 @@ impl<'a> ObjectStore<'a> {
             store: BTreeMap::new(),
             is_metered,
             constants,
+        }
+    }
+
+    pub(super) fn receive_object(
+        &mut self,
+        parent: ObjectID,
+        child: ObjectID,
+        child_version: SequenceNumber,
+        child_ty: &Type,
+        child_layout: MoveTypeLayout,
+        child_move_type: MoveObjectType,
+    ) -> PartialVMResult<ObjectResult<GlobalValue>> {
+        let obj = match self
+            .inner
+            .fetch_object_from_store(Owner::AddressOwner(parent.into()), child)?
+        {
+            Some(obj) if obj.version() == child_version => obj,
+            _ => return Ok(ObjectResult::Loaded(GlobalValue::none())),
+        };
+
+        match deserialize_move_object(&obj, child_ty, child_layout, child_move_type)? {
+            ObjectResult::MismatchedType => Ok(ObjectResult::MismatchedType),
+            ObjectResult::Loaded((_, _, gv)) => Ok(ObjectResult::Loaded(gv)),
         }
     }
 
@@ -364,6 +401,7 @@ impl<'a> ObjectStore<'a> {
         BTreeMap<ObjectID, SequenceNumber>,
         BTreeMap<ObjectID, ChildObjectEffect>,
     ) {
+        // TODO: filter out received objects from here -- don't need it
         let loaded_versions: BTreeMap<ObjectID, SequenceNumber> = self
             .inner
             .cached_objects

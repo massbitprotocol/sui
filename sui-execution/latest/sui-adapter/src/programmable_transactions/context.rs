@@ -33,8 +33,8 @@ use sui_types::{
     move_package::MovePackage,
     object::{Data, MoveObject, Object, Owner},
     storage::{
-        BackingPackageStore, ChildObjectResolver, DeleteKind, DeleteKindWithOldVersion,
-        ObjectChange, WriteKind,
+        BackingPackageStore, DeleteKind, DeleteKindWithOldVersion, ObjectChange,
+        RuntimeObjectResolver, WriteKind,
     },
     transaction::{Argument, CallArg, ObjectArg},
     type_resolver::TypeTagResolver,
@@ -352,7 +352,7 @@ impl<'vm, 'state, 'a> ExecutionContext<'vm, 'state, 'a> {
         // Immutable objects and shared objects cannot be taken by value
         if matches!(
             input_metadata_opt,
-            Some(InputObjectMetadata {
+            Some(InputObjectMetadata::InputObject {
                 owner: Owner::Immutable | Owner::Shared { .. },
                 ..
             })
@@ -396,7 +396,7 @@ impl<'vm, 'state, 'a> ExecutionContext<'vm, 'state, 'a> {
             // error if taken
             return Err(CommandArgumentError::InvalidValueUsage);
         };
-        if input_metadata_opt.is_some() && !input_metadata_opt.unwrap().is_mutable_input {
+        if let Some(InputObjectMetadata::InputObject { is_mutable_input: false, .. }) = input_metadata_opt {
             return Err(CommandArgumentError::InvalidObjectByMutRef);
         }
         // if it is copyable, don't take it as we allow for the value to be copied even if
@@ -453,6 +453,7 @@ impl<'vm, 'state, 'a> ExecutionContext<'vm, 'state, 'a> {
         let Ok((_, value_opt)) = self.borrow_mut_impl(arg, None) else {
             invariant_violation!("Should be able to borrow argument to restore it")
         };
+        // TODO(tzakian): CHECK: if old value is Receiving then the old and new value need to be equal.
         let old_value = value_opt.replace(value);
         assert_invariant!(
             old_value.is_none() || old_value.unwrap().is_copyable(),
@@ -556,20 +557,33 @@ impl<'vm, 'state, 'a> ExecutionContext<'vm, 'state, 'a> {
                 inner: ResultValue { value, .. },
             } = input;
             let Some(object_metadata) = object_metadata_opt else { return Ok(()) };
-            let is_mutable_input = object_metadata.is_mutable_input;
-            let owner = object_metadata.owner;
-            let id = object_metadata.id;
-            input_object_metadata.insert(object_metadata.id, object_metadata);
+            let id = object_metadata.id();
+            input_object_metadata.insert(id, object_metadata.clone());
+            if let InputObjectMetadata::Receiving { id, .. } = &object_metadata {
+                match &value {
+                    // We don't mark non-received receiving objects as they should not marked as
+                    // mutated.
+                    Some(Value::Receiving { .. }) => return Ok(()),
+                    // Impossible!
+                    Some(_) => invariant_violation!("Should never have a non-receiving value for a receiving object"),
+                    // If the value is not present it has been taken by value, and it is a by-value
+                    // input and needs to be marked as such.
+                    None => {
+                        by_value_inputs.insert(*id);
+                        return Ok(())
+                    }
+                }
+            }
             let Some(Value::Object(object_value)) = value else {
                 by_value_inputs.insert(id);
                 return Ok(())
             };
-            if is_mutable_input {
+            if let InputObjectMetadata::InputObject { is_mutable_input: true, owner, .. } = object_metadata {
                 add_additional_write(&mut additional_writes, owner, object_value)?;
             }
             Ok(())
         };
-        let gas_id_opt = gas.object_metadata.as_ref().map(|info| info.id);
+        let gas_id_opt = gas.object_metadata.as_ref().map(|info| info.id());
         add_input_object_write(gas)?;
         for input in inputs {
             add_input_object_write(input)?
@@ -618,6 +632,16 @@ impl<'vm, 'state, 'a> ExecutionContext<'vm, 'state, 'a> {
                                     msg,
                                 ));
                             }
+                        }
+                        Some(Value::Receiving(_, _)) => {
+                            let msg = "Receiving argument not used within the transaction block";
+                            return Err(ExecutionError::new_with_source(
+                                    ExecutionErrorKind::UnusedValueWithoutDrop {
+                                        result_idx: i as u16,
+                                        secondary_idx: j as u16,
+                                    },
+                                    msg,
+                                ));
                         }
                     }
                 }
@@ -755,10 +779,10 @@ impl<'vm, 'state, 'a> ExecutionContext<'vm, 'state, 'a> {
                     let old_version = match input_object_metadata.get(&id) {
                         Some(metadata) => {
                             assert_invariant!(
-                                !matches!(metadata.owner, Owner::Immutable),
+                                !matches!(metadata, InputObjectMetadata::InputObject { owner: Owner::Immutable, .. }),
                                 "Attempting to delete immutable object {id} via delete kind {delete_kind}"
                             );
-                            metadata.version
+                            metadata.version()
                         }
                         None => {
                             match loaded_child_objects.get(&id) {
@@ -906,7 +930,7 @@ impl<'vm, 'state, 'a> TypeTagResolver for ExecutionContext<'vm, 'state, 'a> {
 pub(crate) fn new_session<'state, 'vm>(
     vm: &'vm MoveVM,
     linkage: LinkageView<'state>,
-    child_resolver: &'state dyn ChildObjectResolver,
+    child_resolver: &'state dyn RuntimeObjectResolver,
     input_objects: BTreeMap<ObjectID, Owner>,
     is_metered: bool,
     protocol_config: &ProtocolConfig,
@@ -1129,7 +1153,7 @@ fn load_object<'vm, 'state>(
             invariant_violation!("ObjectOwner objects cannot be input")
         }
     };
-    let object_metadata = InputObjectMetadata {
+    let object_metadata = InputObjectMetadata::InputObject {
         id,
         is_mutable_input,
         owner: obj.owner,
@@ -1183,6 +1207,7 @@ fn load_object_arg<'vm, 'state>(
             /* imm override */ !mutable,
             id,
         ),
+        ObjectArg::Receiving((id, version, _)) => Ok(InputValue::new_receiving_object(id, version)),
     }
 }
 
@@ -1271,12 +1296,12 @@ unsafe fn create_written_object<'vm, 'state>(
     );
 
     let old_obj_ver = metadata_opt
-        .map(|metadata| metadata.version)
+        .map(|metadata| metadata.version())
         .or_else(|| loaded_child_version_opt.copied());
 
     debug_assert!(
         (write_kind == WriteKind::Mutate) == old_obj_ver.is_some(),
-        "Inconsistent state: write_kind: {write_kind:?}, old ver: {old_obj_ver:?}"
+        "Inconsistent state: write_kind: {write_kind:?}, old ver: {old_obj_ver:?} id: {id:?}"
     );
 
     let type_tag = session

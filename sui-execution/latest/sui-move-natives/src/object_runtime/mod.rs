@@ -22,7 +22,7 @@ use sui_types::{
     error::{ExecutionError, ExecutionErrorKind, VMMemoryLimitExceededSubStatusCode},
     metrics::LimitsMetrics,
     object::{MoveObject, Owner},
-    storage::{ChildObjectResolver, DeleteKind, WriteKind},
+    storage::{DeleteKind, RuntimeObjectResolver, WriteKind},
     SUI_CLOCK_OBJECT_ID, SUI_SYSTEM_STATE_OBJECT_ID,
 };
 
@@ -151,7 +151,7 @@ impl TestInventories {
 
 impl<'a> ObjectRuntime<'a> {
     pub fn new(
-        object_resolver: &'a dyn ChildObjectResolver,
+        object_resolver: &'a dyn RuntimeObjectResolver,
         input_objects: BTreeMap<ObjectID, Owner>,
         is_metered: bool,
         protocol_config: &ProtocolConfig,
@@ -311,6 +311,25 @@ impl<'a> ObjectRuntime<'a> {
     ) -> PartialVMResult<bool> {
         self.object_store
             .object_exists_and_has_type(parent, child, child_type)
+    }
+
+    pub(super) fn receive_object(
+        &mut self,
+        parent: ObjectID,
+        child: ObjectID,
+        child_version: SequenceNumber,
+        child_ty: &Type,
+        child_layout: MoveTypeLayout,
+        child_move_type: MoveObjectType,
+    ) -> PartialVMResult<ObjectResult<GlobalValue>> {
+        self.object_store.receive_object(
+            parent,
+            child,
+            child_version,
+            child_ty,
+            child_layout,
+            child_move_type,
+        )
     }
 
     pub(crate) fn get_or_fetch_child_object(
@@ -488,17 +507,19 @@ impl ObjectRuntimeState {
         let writes: LinkedHashMap<_, _> = transfers
             .into_iter()
             .map(|(id, (owner, type_, value))| {
-                let write_kind =
-                    if input_objects.contains_key(&id) || loaded_child_objects.contains_key(&id) {
-                        debug_assert!(!new_ids.contains_key(&id));
-                        WriteKind::Mutate
-                    } else if id == SUI_SYSTEM_STATE_OBJECT_ID || new_ids.contains_key(&id) {
-                        // SUI_SYSTEM_STATE_OBJECT_ID is only transferred during genesis
-                        // TODO find a way to insert this in the new_ids during genesis transactions
-                        WriteKind::Create
-                    } else {
-                        WriteKind::Unwrap
-                    };
+                let write_kind = if input_objects.contains_key(&id)
+                    || loaded_child_objects.contains_key(&id)
+                    || by_value_inputs.contains(&id)
+                {
+                    debug_assert!(!new_ids.contains_key(&id));
+                    WriteKind::Mutate
+                } else if id == SUI_SYSTEM_STATE_OBJECT_ID || new_ids.contains_key(&id) {
+                    // SUI_SYSTEM_STATE_OBJECT_ID is only transferred during genesis
+                    // TODO find a way to insert this in the new_ids during genesis transactions
+                    WriteKind::Create
+                } else {
+                    WriteKind::Unwrap
+                };
                 (id, (write_kind, owner, type_, value))
             })
             .collect();
@@ -507,12 +528,14 @@ impl ObjectRuntimeState {
             .into_iter()
             .map(|(id, ())| {
                 debug_assert!(!new_ids.contains_key(&id));
-                let delete_kind =
-                    if input_objects.contains_key(&id) || loaded_child_objects.contains_key(&id) {
-                        DeleteKind::Normal
-                    } else {
-                        DeleteKind::UnwrapThenDelete
-                    };
+                let delete_kind = if input_objects.contains_key(&id)
+                    || loaded_child_objects.contains_key(&id)
+                    || by_value_inputs.contains(&id)
+                {
+                    DeleteKind::Normal
+                } else {
+                    DeleteKind::UnwrapThenDelete
+                };
                 (id, delete_kind)
             })
             .collect();

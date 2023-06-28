@@ -496,7 +496,7 @@ pub fn has_child_object_with_ty(
     ))
 }
 
-fn get_tag_and_layout(
+pub(crate) fn get_tag_and_layout(
     context: &NativeContext,
     ty: &Type,
 ) -> PartialVMResult<Option<(MoveTypeLayout, StructTag)>> {

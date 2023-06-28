@@ -3,12 +3,19 @@
 
 module sui::transfer {
 
-    use sui::object;
+    use sui::object::{Self, ID};
     use sui::prover;
 
     #[test_only]
     friend sui::test_scenario;
 
+    /// This represents an obligation to `receive` an object of type `T` since
+    /// there is no key/store/drop abilities. Internals of this struct are
+    /// opaque outside this module.
+    struct Receiving<phantom T: key> has drop {
+        id: ID,
+        version: u64,
+    }
 
     /// Shared an object that was previously created. Shared objects must currently
     /// be constructed in the transaction they are created.
@@ -70,6 +77,17 @@ module sui::transfer {
         share_object_impl(obj)
     }
 
+    /// Given mutable (i.e., locked) access to the `parent` and a `Receiving`
+    /// object referencing an object owned by `parent` discharge the `Receiving` obligation
+    /// and return the corresponding owned object.
+    public fun receive<T: key>(parent: &mut object::UID, to_receive: Receiving<T>): T {
+        let Receiving {
+            id,
+            version,
+        } = to_receive;
+        receive_impl(object::uid_to_address(parent), id, version)
+    }
+
     public(friend) native fun freeze_object_impl<T: key>(obj: T);
 
     spec freeze_object_impl {
@@ -107,4 +125,6 @@ module sui::transfer {
         ensures [abstract] global<object::Ownership>(object::id(obj).bytes).owner == recipient;
         ensures [abstract] global<object::Ownership>(object::id(obj).bytes).status == prover::OWNED;
     }
+
+    native fun receive_impl<T: key>(parent: address, to_receive: object::ID, version: u64): T;
 }
