@@ -36,7 +36,6 @@ export function TransactionDetailCard({
 	timestamp,
 }: TransactionDetailsProps) {
 	const md = useBreakpoint('md');
-	const { data: domainName } = useResolveSuiNSName(sender);
 
 	return (
 		<TransactionBlockCard size={md ? 'md' : 'sm'}>
@@ -49,10 +48,7 @@ export function TransactionDetailCard({
 					)}
 					<div className="flex justify-between gap-3 divide-x divide-gray-45 md:gap-5">
 						{sender && (
-							<TransactionDetail
-								label="Sender"
-								value={<AddressLink address={domainName ?? sender} />}
-							/>
+							<TransactionDetail label="Sender" value={<AddressLink address={sender} />} />
 						)}
 						{checkpoint && (
 							<TransactionDetail
