@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { JsonRpcProvider, SuiAddress, SuiObjectResponse } from '@mysten/sui.js';
-import { fetchKiosk, getOwnedKiosks } from '@mysten/kiosk';
+import { KioskData, KioskItem, PagedKioskData, fetchKiosk, getOwnedKiosks } from '@mysten/kiosk';
 import { useQuery } from '@tanstack/react-query';
 import { useRpcClient } from '../api/RpcClientContext';
 
@@ -59,27 +59,31 @@ async function getOriginByteKioskContents(address: SuiAddress, rpc: JsonRpcProvi
 	return kioskContent;
 }
 
+type KioskContents = Omit<KioskData, 'items'> & {
+	items: Partial<KioskItem & SuiObjectResponse>[];
+};
+
 async function getSuiKioskContents(address: SuiAddress, rpc: JsonRpcProvider) {
 	const ownedKiosks = await getOwnedKiosks(rpc, address!);
-	const kioskContents = await Promise.all(
+	const kiosks = new Map<string, KioskContents>();
+
+	await Promise.all(
 		ownedKiosks.kioskIds.map(async (id) => {
-			return fetchKiosk(rpc, id, { limit: 1000 }, {});
-		}),
+			const kiosk = await fetchKiosk(rpc, id, { limit: 1000 }, {});
+			const contents = await rpc.multiGetObjects({
+				ids: kiosk.data.itemIds,
+				options: { showDisplay: true, showContent: true, showOwner: true },
+			});
+			const items = contents.map((object) => {
+				const kioskData = kiosk.data.items.find((item) => item.objectId === object.data?.objectId);
+				return { ...object, ...kioskData };
+			});
+
+			kiosks.set(id, { ...kiosk.data, items });
+		}, kiosks),
 	);
-	const items = kioskContents.flatMap((k) => k.data.items);
-	const ids = items.map((item) => item.objectId);
 
-	// fetch the contents of the objects within a kiosk
-	const kioskContent = await rpc.multiGetObjects({
-		ids,
-		options: {
-			showContent: true,
-			showDisplay: true,
-			showType: true,
-		},
-	});
-
-	return kioskContent;
+	return kiosks;
 }
 
 export function useGetKioskContents(address?: SuiAddress | null, disableOriginByteKiosk?: boolean) {
@@ -88,14 +92,14 @@ export function useGetKioskContents(address?: SuiAddress | null, disableOriginBy
 		// eslint-disable-next-line @tanstack/query/exhaustive-deps
 		queryKey: ['get-kiosk-contents', address, disableOriginByteKiosk],
 		queryFn: async () => {
-			const obKioskContents = await getOriginByteKioskContents(address!, rpc);
-			const suiKioskContents = await getSuiKioskContents(address!, rpc);
+			// const obKioskContents = await getOriginByteKioskContents(address!, rpc);
+			const suiKiosks = await getSuiKioskContents(address!, rpc);
+			const list = Array.from((suiKiosks ?? []).values()).flatMap((d) => d.items);
 
 			return {
-				list: [...suiKioskContents, ...obKioskContents],
+				list,
 				kiosks: {
-					sui: suiKioskContents ?? [],
-					originByte: obKioskContents ?? [],
+					sui: suiKiosks,
 				},
 			};
 		},

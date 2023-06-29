@@ -23,6 +23,7 @@ export function useGetNFTs(address?: SuiAddress | null) {
 		},
 		50,
 	);
+
 	const { apiEnv } = useAppSelector((state) => state.app);
 	const disableOriginByteKiosk = apiEnv !== 'mainnet';
 
@@ -30,7 +31,7 @@ export function useGetNFTs(address?: SuiAddress | null) {
 		address,
 		disableOriginByteKiosk,
 	);
-
+	console.log(kioskData);
 	const filteredKioskContents = (kioskData?.list ?? [])
 		.filter(hasDisplayData)
 		.map(({ data }) => (data as SuiObjectData) || []);

@@ -30,7 +30,7 @@ function NFTDetailsPage() {
 	const { nftFields, fileExtensionType, filePath } = useNFTBasicData(objectData);
 	const address = useActiveAddress();
 	const { data } = useGetKioskContents(address);
-	const isContainedInSuiKiosk = data?.kiosks.sui.some((k) => k.data?.objectId === nftId);
+	const isContainedInSuiKiosk = data?.list.some((k) => k.data?.objectId === nftId);
 	const marketplaceLinks = useFeatureValue('kiosk-marketplace-links', [
 		{ href: 'https://docs.sui.io/build/sui-kiosk', text: 'Learn more about Kiosks' },
 		{ href: 'https://sui.directory/?_project_type=marketplace', text: 'Explore Sui Marketplaces' },
@@ -162,35 +162,21 @@ function NFTDetailsPage() {
 								</Collapse>
 							) : null}
 
-							{isContainedInSuiKiosk ? (
-								<div className="flex flex-col gap-2 mb-3">
-									{marketplaceLinks.map(({ href, text }) => (
-										<Button
-											key={href}
-											after={<ArrowUpRight12 />}
-											variant="outline"
-											href={href}
-											text={text}
-										/>
-									))}
-								</div>
-							) : (
-								<div className="mb-3 flex flex-1 items-end">
-									<Button
-										variant="primary"
-										size="tall"
-										disabled={!isTransferable}
-										to={`/nft-transfer/${nftId}`}
-										title={
-											isTransferable
-												? undefined
-												: "Unable to send. NFT doesn't have public transfer method"
-										}
-										text="Send NFT"
-										after={<ArrowRight16 />}
-									/>
-								</div>
-							)}
+							<div className="mb-3 flex flex-1 items-end">
+								<Button
+									variant="primary"
+									size="tall"
+									disabled={!isTransferable}
+									to={`/nft-transfer/${nftId}`}
+									title={
+										isTransferable
+											? undefined
+											: "Unable to send. NFT doesn't have public transfer method"
+									}
+									text="Send NFT"
+									after={<ArrowRight16 />}
+								/>
+							</div>
 						</div>
 					</>
 				) : (

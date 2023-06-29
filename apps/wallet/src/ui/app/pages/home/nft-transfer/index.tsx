@@ -18,7 +18,7 @@ function NftTransferPage() {
 	// verify that the nft is owned by the user and is transferable
 	const { data: ownedNFT, isLoading } = useOwnedNFT(nftId || '', address);
 	const navigate = useNavigate();
-
+	console.log(ownedNFT);
 	return (
 		<Overlay showModal={true} title="Send NFT" closeOverlay={() => navigate('/nfts')}>
 			<div className="flex w-full flex-col h-full">
