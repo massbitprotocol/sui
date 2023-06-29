@@ -3,7 +3,6 @@
 
 use crate::committee::EpochId;
 use crate::effects::{TransactionEffects, TransactionEvents};
-use crate::error::ExecutionErrorKind;
 use crate::execution_status::ExecutionStatus;
 use crate::storage::{DeleteKindWithOldVersion, ObjectStore};
 use crate::sui_system_state::{
@@ -542,19 +541,6 @@ impl<'backing> TemporaryStore<'backing> {
                     "Internal invariant violation in tx {}: Deleting immutable object {}",
                     digest, id
                 )));
-            }
-            if object.owner.is_shared() && kind.to_delete_kind() == DeleteKind::Wrap {
-                let digest = self.tx_digest;
-                return Err(ExecutionError::new(
-                    ExecutionErrorKind::SharedObjectOperationNotAllowed,
-                    Some(
-                        format!(
-                            "Internal invariant violation in tx {}: Wrapping shared object {}",
-                            digest, id
-                        )
-                        .into(),
-                    ),
-                ));
             }
         }
 
