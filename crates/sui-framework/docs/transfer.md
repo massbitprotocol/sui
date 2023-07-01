@@ -37,6 +37,16 @@ be constructed in the transaction they are created.
 
 
 
+<a name="0x2_transfer_ESharedObjectOperationNotSupported"></a>
+
+Shared object operations such as wrapping, freezing, and converting to owned are not allowed.
+
+
+<pre><code><b>const</b> <a href="transfer.md#0x2_transfer_ESharedObjectOperationNotSupported">ESharedObjectOperationNotSupported</a>: u64 = 1;
+</code></pre>
+
+
+
 <a name="0x2_transfer_transfer"></a>
 
 ## Function `transfer`

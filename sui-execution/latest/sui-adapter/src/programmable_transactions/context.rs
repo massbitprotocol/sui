@@ -328,18 +328,17 @@ impl<'vm, 'state, 'a> ExecutionContext<'vm, 'state, 'a> {
         command_kind: CommandKind<'_>,
         arg_idx: usize,
         arg: Argument,
-        protocol_config: &ProtocolConfig,
     ) -> Result<V, ExecutionError> {
-        self.by_value_arg_(command_kind, arg, protocol_config)
+        self.by_value_arg_(command_kind, arg)
             .map_err(|e| command_argument_error(e, arg_idx))
     }
     fn by_value_arg_<V: TryFromValue>(
         &mut self,
         command_kind: CommandKind<'_>,
         arg: Argument,
-        protocol_config: &ProtocolConfig,
     ) -> Result<V, CommandArgumentError> {
         let is_borrowed = self.arg_is_borrowed(&arg);
+        let protocol_config = self.protocol_config;
         let (input_metadata_opt, val_opt) = self.borrow_mut(arg, UsageKind::ByValue)?;
         let is_copyable = if let Some(val) = val_opt {
             val.is_copyable()
@@ -359,29 +358,17 @@ impl<'vm, 'state, 'a> ExecutionContext<'vm, 'state, 'a> {
         {
             return Err(CommandArgumentError::InvalidGasCoinUsage);
         }
-        if protocol_config.shared_object_deletion() {
-            // Immutable objects cannot be taken by value
-            if matches!(
-                input_metadata_opt,
-                Some(InputObjectMetadata {
-                    owner: Owner::Immutable,
-                    ..
-                })
-            ) {
-                return Err(CommandArgumentError::InvalidObjectByValue);
+        match input_metadata_opt {
+            Some(InputObjectMetadata { owner: Owner::Immutable, .. }) => {
+                return Err(CommandArgumentError::InvalidObjectByValue)
             }
-        } else {
-            // Immutable and shared objects cannot be taken by value
-            if matches!(
-                input_metadata_opt,
-                Some(InputObjectMetadata {
-                    owner: Owner::Immutable | Owner::Shared { .. },
-                    ..
-                })
-            ) {
-                return Err(CommandArgumentError::InvalidObjectByValue);
+            Some(InputObjectMetadata { owner: Owner::Shared {..}, .. })
+            if !protocol_config.shared_object_deletion() => {
+                return Err(CommandArgumentError::InvalidObjectByValue)
             }
+            _ => {}
         }
+
         let val = if is_copyable {
             val_opt.as_ref().unwrap().clone()
         } else {

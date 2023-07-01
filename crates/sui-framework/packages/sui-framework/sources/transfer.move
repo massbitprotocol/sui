@@ -14,6 +14,9 @@ module sui::transfer {
     /// be constructed in the transaction they are created.
     const ESharedNonNewObject: u64 = 0;
 
+    /// Shared object operations such as wrapping, freezing, and converting to owned are not allowed.
+    const ESharedObjectOperationNotSupported: u64 = 1;
+
     /// Transfer ownership of `obj` to `recipient`. `obj` must have the `key` attribute,
     /// which (in turn) ensures that `obj` has a globally unique ID. Note that if the recipient
     /// address represents an object ID, the `obj` sent will be inaccessible after the transfer
