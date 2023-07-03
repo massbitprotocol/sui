@@ -31,18 +31,26 @@ export function useGetNFTs(address?: SuiAddress | null) {
 		address,
 		disableOriginByteKiosk,
 	);
-	console.log(kioskData);
+
 	const filteredKioskContents = (kioskData?.list ?? [])
 		.filter(hasDisplayData)
 		.map(({ data }) => (data as SuiObjectData) || []);
 
-	const nfts = [
-		...(filteredKioskContents ?? []),
-		...(data?.pages
-			.flatMap((page) => page.data)
-			.filter(hasDisplayData)
-			.map(({ data }) => data as SuiObjectData) || []),
-	];
+	const nfts = {
+		kiosks: kioskData,
+		ownedObjects:
+			data?.pages
+				.flatMap((page) => page.data)
+				// .filter(hasDisplayData)
+				.map(({ data }) => data as SuiObjectData) || [],
+	};
+	// const nfts = [
+	// 	...(filteredKioskContents ?? []),
+	// 	...(data?.pages
+	// 		.flatMap((page) => page.data)
+	// 		.filter(hasDisplayData)
+	// 		.map(({ data }) => data as SuiObjectData) || []),
+	// ];
 
 	return {
 		data: nfts,

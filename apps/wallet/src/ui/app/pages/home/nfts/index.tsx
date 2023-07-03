@@ -35,7 +35,7 @@ function NftsPage() {
 		if (isIntersecting && hasNextPage && !isFetchingNextPage) {
 			fetchNextPage();
 		}
-	}, [nfts.length, isIntersecting, fetchNextPage, hasNextPage, isFetchingNextPage]);
+	}, [nfts.ownedObjects.length, isIntersecting, fetchNextPage, hasNextPage, isFetchingNextPage]);
 	if (isInitialLoading) {
 		return (
 			<div className="mt-1 flex w-full justify-center">
@@ -56,9 +56,10 @@ function NftsPage() {
 						<small>{(error as Error).message}</small>
 					</Alert>
 				) : null}
-				{nfts?.length ? (
+
+				{nfts?.ownedObjects.length ? (
 					<div className="grid w-full grid-cols-2 gap-x-3.5 gap-y-4">
-						{nfts.map(({ objectId, type }) => (
+						{nfts.ownedObjects.map(({ objectId, type }) => (
 							<Link
 								to={`/nft-details?${new URLSearchParams({
 									objectId,
@@ -75,6 +76,7 @@ function NftsPage() {
 								<ErrorBoundary>
 									<NFTDisplayCard
 										objectId={objectId}
+										objectType={type}
 										size="md"
 										showLabel
 										animateHover

@@ -1,12 +1,11 @@
 // Copyright (c) Mysten Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-import { isKioskOwnerToken, useGetObject } from '@mysten/core';
+import { useGetObject } from '@mysten/core';
 import { formatAddress } from '@mysten/sui.js';
 import { cva, cx } from 'class-variance-authority';
 
 import { useResolveVideo } from '../../hooks/useResolveVideo';
-import { Kiosk } from './Kiosk';
 import { Heading } from '_app/shared/heading';
 import Loading from '_components/loading';
 import { NftImage, type NftImageProps } from '_components/nft-display/NftImage';
@@ -47,9 +46,6 @@ export function NFTDisplayCard({
 	playable,
 }: NFTsProps) {
 	const { data: objectData } = useGetObject(objectId);
-
-	const isOwnerToken = isKioskOwnerToken(objectData);
-
 	const { data: nftMeta, isLoading } = useGetNFTMeta(objectId);
 	const nftName = nftMeta?.name || formatAddress(objectId);
 	const nftImageUrl = nftMeta?.imageUrl || '';
@@ -58,7 +54,46 @@ export function NFTDisplayCard({
 
 	return (
 		<div className={nftDisplayCardStyles({ animateHover, wideView })}>
-			<Loading loading={isLoading}>{isOwnerToken ? <Kiosk object={objectData} /> : null}</Loading>
+			<Loading loading={isLoading}>
+				{video && playable ? (
+					<video controls className="h-full w-full rounded-md overflow-hidden" src={video} />
+				) : (
+					<NftImage
+						name={nftName}
+						src={nftImageUrl}
+						title={nftMeta?.description || ''}
+						animateHover={true}
+						showLabel={!wideView}
+						borderRadius={borderRadius}
+						size={size}
+						video={video}
+					/>
+				)}
+				{wideView && (
+					<div className="flex flex-col gap-1 flex-1 min-w-0 ml-1">
+						<Heading variant="heading6" color="gray-90" truncate>
+							{nftName}
+						</Heading>
+						<div className="text-gray-75 text-body font-medium">
+							{nftImageUrl ? (
+								`${fileExtensionType.name} ${fileExtensionType.type}`
+							) : (
+								<span className="uppercase font-normal text-bodySmall">NO MEDIA</span>
+							)}
+						</div>
+					</div>
+				)}
+				{showLabel && !wideView && (
+					<div
+						className={cx(
+							'flex-1 mt-2 text-steel-dark truncate overflow-hidden max-w-full',
+							animateHover ? 'group-hover:text-black duration-200 ease-ease-in-out-cubic' : '',
+						)}
+					>
+						{nftName}
+					</div>
+				)}
+			</Loading>
 		</div>
 	);
 }

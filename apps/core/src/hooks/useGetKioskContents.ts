@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { JsonRpcProvider, SuiAddress, SuiObjectResponse } from '@mysten/sui.js';
-import { KioskData, KioskItem, PagedKioskData, fetchKiosk, getOwnedKiosks } from '@mysten/kiosk';
+import { KIOSK_OWNER_CAP, KioskData, KioskItem, fetchKiosk, getOwnedKiosks } from '@mysten/kiosk';
 import { useQuery } from '@tanstack/react-query';
 import { useRpcClient } from '../api/RpcClientContext';
 
@@ -15,6 +15,11 @@ const getKioskId = (obj: SuiObjectResponse) =>
 export const ORIGINBYTE_KIOSK_MODULE =
 	'0x95a441d389b07437d00dd07e0b6f05f513d7659b13fd7c5d3923c7d9d847199b::ob_kiosk' as const;
 export const ORIGINBYTE_KIOSK_OWNER_TOKEN = `${ORIGINBYTE_KIOSK_MODULE}::OwnerToken`;
+
+export function isKioskOwnerToken(object?: SuiObjectResponse) {
+	if (!object) return false;
+	return [KIOSK_OWNER_CAP].includes(object.data?.type ?? '');
+}
 
 async function getOriginByteKioskContents(address: SuiAddress, rpc: JsonRpcProvider) {
 	const data = await rpc.getOwnedObjects({
@@ -63,8 +68,32 @@ type KioskContents = Omit<KioskData, 'items'> & {
 	items: Partial<KioskItem & SuiObjectResponse>[];
 };
 
+async function getOwnedOriginByteKiosks(address: SuiAddress, rpc: JsonRpcProvider) {
+	const data = await rpc.getOwnedObjects({
+		owner: address,
+		filter: {
+			StructType: ORIGINBYTE_KIOSK_OWNER_TOKEN,
+		},
+	});
+	const ids = data.data.map((object) => getKioskId(object) ?? []);
+	console.log(ids);
+	return {
+		kioskIds: ids.flat(),
+		kioskOwnerCaps: data.data.map(({ data }) => data),
+	};
+}
+
+async function getAllOwnedKiosks(address: SuiAddress, rpc: JsonRpcProvider) {
+	// Sui Kiosks
+	const ownedKiosks = await getOwnedKiosks(rpc, address!);
+	console.log(ownedKiosks);
+	// OriginByteKiosks
+	const ownedObKiosks = await getOwnedOriginByteKiosks(address!, rpc);
+}
+
 async function getSuiKioskContents(address: SuiAddress, rpc: JsonRpcProvider) {
 	const ownedKiosks = await getOwnedKiosks(rpc, address!);
+
 	const kiosks = new Map<string, KioskContents>();
 
 	await Promise.all(
@@ -74,6 +103,7 @@ async function getSuiKioskContents(address: SuiAddress, rpc: JsonRpcProvider) {
 				ids: kiosk.data.itemIds,
 				options: { showDisplay: true, showContent: true, showOwner: true },
 			});
+
 			const items = contents.map((object) => {
 				const kioskData = kiosk.data.items.find((item) => item.objectId === object.data?.objectId);
 				return { ...object, ...kioskData };
