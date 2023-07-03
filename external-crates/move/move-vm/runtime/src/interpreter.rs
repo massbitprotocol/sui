@@ -98,39 +98,32 @@ impl<'a, 'b> TypeView for TypeWithLoader<'a, 'b> {
     }
 }
 
-pub struct OperandStackInterface<'a> {
-    stack: &'a mut Stack,
+pub struct InterpreterInterface<'a> {
+    interpreter: &'a mut Interpreter,
 }
 
-impl<'a> OperandStackInterface<'a> {
-    // manage internal data
+impl<'a> InterpreterInterface<'a> {
     pub fn push_ty(&mut self, ty: Type) -> PartialVMResult<()> {
-        self.stack.push_ty(ty)
+        self.interpreter.operand_stack.push_ty(ty)
     }
 
     pub fn pop_ty(&mut self) -> PartialVMResult<Type> {
-        self.stack.pop_ty()
+        self.interpreter.operand_stack.pop_ty()
     }
 
     pub fn popn_tys(&mut self, n: u16) -> PartialVMResult<Vec<Type>> {
-        self.stack.popn_tys(n)
+        self.interpreter.operand_stack.popn_tys(n)
     }
 
     pub fn check_balance(&self) -> PartialVMResult<()> {
-        self.stack.check_balance()
+        self.interpreter.operand_stack.check_balance()
     }
-}
 
-pub struct ErrorHandlerInterface<'a> {
-    interpreter: &'a Interpreter,
-}
-
-impl<'a> ErrorHandlerInterface<'a> {
     pub fn set_location(&self, err: PartialVMError) -> VMError {
         self.interpreter.set_location(err)
     }
 
-    pub fn maybe_core_dump(&self, mut err: VMError, current_frame: &Frame) -> VMError {
+    pub fn maybe_core_dump(&self, err: VMError, current_frame: &Frame) -> VMError {
         self.interpreter.maybe_core_dump(err, current_frame)
     }
 }
@@ -141,14 +134,8 @@ impl Interpreter {
         &self.runtime_limits_config
     }
 
-    pub fn operand_stack_interface(&mut self) -> OperandStackInterface {
-        OperandStackInterface {
-            stack: &mut self.operand_stack,
-        }
-    }
-
-    pub fn error_handler(&self) -> ErrorHandlerInterface {
-        ErrorHandlerInterface { interpreter: self }
+    pub fn interpreter_interface(&mut self) -> InterpreterInterface {
+        InterpreterInterface { interpreter: self }
     }
 
     pub fn pre_hook_entrypoint(
@@ -160,11 +147,9 @@ impl Interpreter {
         loader: &Loader,
     ) -> VMResult<()> {
         profile_open_frame!(gas_meter, function.pretty_string());
-        let mut operand_stack = interpreter.operand_stack_interface();
-        let mut error_handler = interpreter.error_handler();
 
         ParanoidTypeChecker::pre_hook_entrypoint(
-            &mut operand_stack,
+            &mut interpreter.interpreter_interface(),
             function,
             ty_args,
             data_store.link_context(),
@@ -176,26 +161,24 @@ impl Interpreter {
 
     pub fn pre_hook_fn(
         interpreter: &mut Interpreter,
+        current_frame: &mut Frame,
+        data_store: &mut impl DataStore,
+        loader: &Loader,
         gas_meter: &mut impl GasMeter,
         function: &Arc<Function>,
         ty_args: &[Type],
-        data_store: &mut impl DataStore,
-        loader: &Loader,
-        current_frame: &Frame,
     ) -> VMResult<()> {
         #[cfg(debug_assertions)]
         profile_open_frame!(gas_meter, function.pretty_string());
-        let mut operand_stack = interpreter.operand_stack_interface();
-        let error_handler = interpreter.error_handler();
+        let mut frame_interface = current_frame.frame_interface();
 
         ParanoidTypeChecker::pre_hook_fn(
-            &mut operand_stack,
-            &error_handler,
+            &mut interpreter.interpreter_interface(),
+            &mut frame_interface,
             function,
             ty_args,
             data_store.link_context(),
             loader,
-            current_frame,
         )?;
 
         Ok(())
@@ -209,19 +192,16 @@ impl Interpreter {
         gas_meter: &mut impl GasMeter,
         function: &Arc<Function>,
         instruction: &Bytecode,
-        local_tys: &[Type],
         locals: &Locals,
         ty_args: &[Type],
         resolver: &Resolver,
         interpreter: &mut Interpreter,
     ) -> PartialVMResult<()> {
-        let mut operand_stack = interpreter.operand_stack_interface();
         ParanoidTypeChecker::pre_hook_instr(
-            &mut operand_stack,
+            &mut interpreter.interpreter_interface(),
             gas_meter,
             function,
             instruction,
-            local_tys,
             locals,
             ty_args,
             resolver,
@@ -234,20 +214,17 @@ impl Interpreter {
         gas_meter: &mut impl GasMeter,
         function: &Arc<Function>,
         instruction: &Bytecode,
-        local_tys: &[Type],
         ty_args: &[Type],
         resolver: &Resolver,
         interpreter: &mut Interpreter,
         r: &InstrRet,
     ) -> PartialVMResult<()> {
         profile_close_instr!(gas_meter, format!("{:?}", instruction));
-        let mut operand_stack = interpreter.operand_stack_interface();
         ParanoidTypeChecker::post_hook_instr(
-            &mut operand_stack,
+            &mut interpreter.interpreter_interface(),
             gas_meter,
             function,
             instruction,
-            local_tys,
             ty_args,
             resolver,
             r,
@@ -353,7 +330,7 @@ impl Interpreter {
 
         let link_context = data_store.link_context();
         let mut current_frame = self
-            .make_new_frame(link_context, loader, function, ty_args, locals)
+            .make_new_frame(function, ty_args.clone(), locals)
             .map_err(|err| self.set_location(err))?;
         loop {
             let resolver = current_frame.resolver(link_context, loader);
@@ -388,12 +365,12 @@ impl Interpreter {
                     let func = resolver.function_from_handle(fh_idx);
                     Self::pre_hook_fn(
                         &mut self,
-                        gas_meter,
-                        &func,
-                        &current_frame.ty_args(),
+                        &mut current_frame,
                         data_store,
                         loader,
-                        &current_frame,
+                        gas_meter,
+                        &func,
+                        &ty_args,
                     );
 
                     // Charge gas
@@ -421,17 +398,16 @@ impl Interpreter {
                             data_store,
                             gas_meter,
                             extensions,
-                            func,
+                            func.clone(),
                             vec![],
                         )?;
                         current_frame.pc += 1; // advance past the Call instruction in the caller
 
-                        // can we move this into call_native?
                         Self::post_hook_fn(gas_meter, &func);
                         continue;
                     }
                     let frame = self
-                        .make_call_frame(link_context, loader, func, vec![])
+                        .make_call_frame(loader, func, vec![])
                         .map_err(|e| self.set_location(e))
                         .map_err(|err| self.maybe_core_dump(err, &current_frame))?;
                     self.call_stack.push(current_frame).map_err(|frame| {
@@ -450,12 +426,12 @@ impl Interpreter {
                     let func = resolver.function_from_instantiation(idx);
                     Self::pre_hook_fn(
                         &mut self,
-                        gas_meter,
-                        &func,
-                        &current_frame.ty_args(),
+                        &mut current_frame,
                         data_store,
                         loader,
-                        &current_frame,
+                        gas_meter,
+                        &func,
+                        &ty_args,
                     );
 
                     // Charge gas
@@ -480,7 +456,12 @@ impl Interpreter {
 
                     if func.is_native() {
                         self.call_native(
-                            &resolver, data_store, gas_meter, extensions, func, ty_args,
+                            &resolver,
+                            data_store,
+                            gas_meter,
+                            extensions,
+                            func.clone(),
+                            ty_args,
                         )?;
                         current_frame.pc += 1; // advance past the Call instruction in the caller
 
@@ -488,7 +469,7 @@ impl Interpreter {
                         continue;
                     }
                     let frame = self
-                        .make_call_frame(link_context, loader, func, ty_args)
+                        .make_call_frame(loader, func, ty_args)
                         .map_err(|e| self.set_location(e))
                         .map_err(|err| self.maybe_core_dump(err, &current_frame))?;
                     self.call_stack.push(current_frame).map_err(|frame| {
@@ -509,14 +490,12 @@ impl Interpreter {
     /// function are incorrectly attributed to the caller.
     fn make_call_frame(
         &mut self,
-        link_context: AccountAddress,
         loader: &Loader,
         func: Arc<Function>,
         ty_args: Vec<Type>,
     ) -> PartialVMResult<Frame> {
         let mut locals = Locals::new(func.local_count());
         let arg_count = func.arg_count();
-        let is_generic = !ty_args.is_empty();
         for i in 0..arg_count {
             locals.store_loc(
                 arg_count - i - 1,
@@ -526,7 +505,7 @@ impl Interpreter {
                     .enable_invariant_violation_check_in_swap_loc,
             )?;
         }
-        self.make_new_frame(link_context, loader, func, ty_args, locals)
+        self.make_new_frame(func, ty_args, locals)
     }
 
     /// Create a new `Frame` given a `Function` and the function `Locals`.
@@ -534,22 +513,15 @@ impl Interpreter {
     /// The locals must be loaded before calling this.
     fn make_new_frame(
         &self,
-        link_context: AccountAddress,
-        loader: &Loader,
         function: Arc<Function>,
         ty_args: Vec<Type>,
         locals: Locals,
     ) -> PartialVMResult<Frame> {
-        // TODO(wlmyng): fetch from interpreter.operations.contains(ParanoidTypeChecker).ty_args
-        let local_tys =
-            ParanoidTypeChecker::get_local_types(&function, &ty_args, link_context, loader)?;
-
         Ok(Frame {
             pc: 0,
             locals,
             function,
             ty_args,
-            local_tys,
         })
     }
 
@@ -624,7 +596,7 @@ impl Interpreter {
         gas_meter: &mut impl GasMeter,
         extensions: &mut NativeContextExtensions,
         function: Arc<Function>,
-        ty_args: &[Type], // entrypoint, or call_native_impl -> call_native -> when new frame is created
+        ty_args: &[Type],
     ) -> PartialVMResult<SmallVec<[Value; 1]>> {
         let return_type_count = function.return_type_count();
         let mut args = VecDeque::new();
@@ -643,7 +615,6 @@ impl Interpreter {
         let native_function = function.get_native()?;
 
         gas_meter.charge_native_function_before_execution(
-            // TODO(wlmyng): fetch from self.operations.contains(ParanoidTypeChecker).ty_args
             ty_args.iter().map(|ty| TypeWithLoader {
                 ty,
                 loader: resolver.loader(),
@@ -1194,20 +1165,9 @@ impl CallStack {
     }
 }
 
-/// A `Frame` is the execution context for a function. It holds the locals of the function and
-/// the function itself.
-// #[derive(Debug)]
-pub struct Frame {
-    pc: u16,
-    locals: Locals,
-    function: Arc<Function>,
-    ty_args: Vec<Type>,
-    local_tys: Vec<Type>,
-}
-
 /// An `ExitCode` from `execute_code_unit`.
 #[derive(Debug)]
-enum ExitCode {
+pub enum ExitCode {
     Return,
     Call(FunctionHandleIndex),
     CallGeneric(FunctionInstantiationIndex),
@@ -1224,7 +1184,35 @@ pub fn check_ability(has_ability: bool) -> PartialVMResult<()> {
     }
 }
 
+/// A `Frame` is the execution context for a function. It holds the locals of the function and
+/// the function itself.
+// #[derive(Debug)]
+pub struct Frame {
+    pc: u16,
+    locals: Locals,
+    function: Arc<Function>,
+    ty_args: Vec<Type>,
+}
+
+pub struct FrameInterface<'a> {
+    frame: &'a mut Frame,
+}
+
+impl<'a> FrameInterface<'a> {
+    pub(crate) fn function(&self) -> &Arc<Function> {
+        &self.frame.function()
+    }
+
+    pub fn get_frame(&self) -> &Frame {
+        self.frame
+    }
+}
+
 impl Frame {
+    pub fn frame_interface(&mut self) -> FrameInterface {
+        FrameInterface { frame: self }
+    }
+
     /// Execute a Move function until a return or a call opcode is found.
     fn execute_code(
         &mut self,
@@ -1834,7 +1822,6 @@ impl Frame {
                     gas_meter,
                     &self.function,
                     instruction,
-                    &self.local_tys,
                     &self.locals,
                     &self.ty_args,
                     resolver,
@@ -1857,7 +1844,6 @@ impl Frame {
                     gas_meter,
                     &self.function,
                     instruction,
-                    &self.local_tys,
                     &self.ty_args,
                     resolver,
                     interpreter,
@@ -1895,7 +1881,7 @@ impl Frame {
         &self.ty_args
     }
 
-    pub fn function(&self) -> &Arc<Function> {
+    pub(crate) fn function(&self) -> &Arc<Function> {
         &self.function
     }
 

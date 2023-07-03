@@ -12,15 +12,15 @@ use move_core_types::{account_address::AccountAddress, vm_status::StatusCode};
 use move_vm_types::{gas::GasMeter, loaded_data::runtime_types::Type, values::Locals};
 
 use crate::{
-    interpreter::{check_ability, ErrorHandlerInterface, Frame, InstrRet, OperandStackInterface},
+    interpreter::{check_ability, FrameInterface, InstrRet, InterpreterInterface},
     loader::{Function, Loader, Resolver},
 };
 
 pub struct ParanoidTypeChecker {}
 
 impl ParanoidTypeChecker {
-    pub fn pre_hook_entrypoint(
-        operand_stack: &mut OperandStackInterface,
+    pub(crate) fn pre_hook_entrypoint(
+        interpreter: &mut InterpreterInterface,
         function: &Arc<Function>,
         ty_args: &[Type],
         link_context: AccountAddress,
@@ -28,14 +28,14 @@ impl ParanoidTypeChecker {
     ) -> VMResult<()> {
         if function.is_native() {
             ParanoidTypeChecker::push_parameter_types(
-                operand_stack,
+                interpreter,
                 &function,
                 &ty_args,
                 link_context,
                 loader,
             )?;
             let resolver = function.get_resolver(link_context, loader);
-            ParanoidTypeChecker::native_function(operand_stack, &function, ty_args, &resolver)
+            ParanoidTypeChecker::native_function(interpreter, &function, ty_args, &resolver)
                 .map_err(|e| match function.module_id() {
                     Some(id) => e
                         .at_code_offset(function.index(), 0)
@@ -50,24 +50,22 @@ impl ParanoidTypeChecker {
         Ok(())
     }
 
-    pub fn pre_hook_fn(
-        operand_stack: &mut OperandStackInterface,
-        error_handler: &ErrorHandlerInterface,
+    pub(crate) fn pre_hook_fn(
+        interpreter: &mut InterpreterInterface,
+        current_frame: &mut FrameInterface,
         function: &Arc<Function>,
         ty_args: &[Type],
         link_context: AccountAddress,
         loader: &Loader,
-        current_frame: &Frame,
     ) -> VMResult<()> {
         ParanoidTypeChecker::check_friend_or_private_call(
-            operand_stack,
-            error_handler,
+            interpreter,
             current_frame.function(),
             &function,
         )?;
         if function.is_native() {
             let resolver = function.get_resolver(link_context, loader);
-            ParanoidTypeChecker::native_function(operand_stack, &function, ty_args, &resolver)
+            ParanoidTypeChecker::native_function(interpreter, &function, ty_args, &resolver)
                 .map_err(|e| match function.module_id() {
                     Some(id) => e
                         .at_code_offset(function.index(), 0)
@@ -80,33 +78,34 @@ impl ParanoidTypeChecker {
                 })?;
         } else {
             ParanoidTypeChecker::non_native_function(
-                operand_stack,
+                interpreter,
                 &function,
                 &ty_args,
                 loader,
                 link_context,
             )
-            .map_err(|e| error_handler.set_location(e))
-            .map_err(|err| error_handler.maybe_core_dump(err, &current_frame))?;
+            .map_err(|e| interpreter.set_location(e))
+            .map_err(|err| interpreter.maybe_core_dump(err, current_frame.get_frame()))?;
         }
         Ok(())
     }
 
-    pub fn post_hook_fn(gas_meter: &mut impl GasMeter, function: &Arc<Function>) -> () {}
+    pub(crate) fn post_hook_fn(gas_meter: &mut impl GasMeter, function: &Arc<Function>) -> () {}
 
-    pub fn pre_hook_instr(
-        operand_stack: &mut OperandStackInterface,
+    pub(crate) fn pre_hook_instr(
+        interpreter: &mut InterpreterInterface,
         gas_meter: &mut impl GasMeter,
         function: &Arc<Function>,
         instruction: &Bytecode,
-        local_tys: &[Type],
         locals: &Locals,
         ty_args: &[Type],
         resolver: &Resolver,
     ) -> PartialVMResult<()> {
+        let local_tys = ParanoidTypeChecker::get_local_types(&resolver, &function, &ty_args)?;
+
         ParanoidTypeChecker::pre_instr(
-            operand_stack,
-            local_tys,
+            interpreter,
+            &local_tys,
             locals,
             ty_args,
             resolver,
@@ -115,19 +114,20 @@ impl ParanoidTypeChecker {
         Ok(())
     }
 
-    pub fn post_hook_instr(
-        operand_stack: &mut OperandStackInterface,
+    pub(crate) fn post_hook_instr(
+        interpreter: &mut InterpreterInterface,
         gas_meter: &mut impl GasMeter,
         function: &Arc<Function>,
         instruction: &Bytecode,
-        local_tys: &[Type],
         ty_args: &[Type],
         resolver: &Resolver,
         r: &InstrRet,
     ) -> PartialVMResult<()> {
+        let local_tys = ParanoidTypeChecker::get_local_types(&resolver, &function, &ty_args)?;
+
         ParanoidTypeChecker::post_instr(
-            operand_stack,
-            local_tys,
+            interpreter,
+            &local_tys,
             ty_args,
             resolver,
             instruction,
@@ -137,7 +137,7 @@ impl ParanoidTypeChecker {
     }
 
     fn push_parameter_types(
-        operand_stack: &mut OperandStackInterface,
+        interpreter: &mut InterpreterInterface,
         function: &Function,
         ty_args: &[Type],
         link_context: AccountAddress,
@@ -153,7 +153,7 @@ impl ParanoidTypeChecker {
                     .subst(ty, &ty_args)
                     .map_err(|e| e.finish(Location::Undefined))?
             };
-            operand_stack
+            interpreter
                 .push_ty(type_)
                 .map_err(|e| e.finish(Location::Undefined))?;
         }
@@ -161,8 +161,7 @@ impl ParanoidTypeChecker {
     }
 
     fn check_friend_or_private_call(
-        operand_stack: &mut OperandStackInterface,
-        error_handler: &ErrorHandlerInterface,
+        interpreter: &mut InterpreterInterface,
         caller: &Arc<Function>,
         callee: &Arc<Function>,
     ) -> VMResult<()> {
@@ -172,13 +171,13 @@ impl ParanoidTypeChecker {
                     if caller_id.address() == callee_id.address() {
                         Ok(())
                     } else {
-                        Err(error_handler.set_location(PartialVMError::new(StatusCode::UNKNOWN_INVARIANT_VIOLATION_ERROR)
+                        Err(interpreter.set_location(PartialVMError::new(StatusCode::UNKNOWN_INVARIANT_VIOLATION_ERROR)
                                 .with_message(
                                     format!("Private/Friend function invocation error, caller: {:?}::{:?}, callee: {:?}::{:?}", caller_id, caller.name(), callee_id, callee.name()),
                                 )))
                     }
                 }
-                _ => Err(error_handler.set_location(
+                _ => Err(interpreter.set_location(
                     PartialVMError::new(StatusCode::UNKNOWN_INVARIANT_VIOLATION_ERROR)
                         .with_message(format!(
                             "Private/Friend function invocation error caller: {:?}, callee {:?}",
@@ -193,25 +192,26 @@ impl ParanoidTypeChecker {
     }
 
     fn non_native_function(
-        operand_stack: &mut OperandStackInterface,
+        interpreter: &mut InterpreterInterface,
         function: &Function,
         ty_args: &[Type],
         loader: &Loader,
         link_context: AccountAddress,
     ) -> PartialVMResult<()> {
         ParanoidTypeChecker::check_local_types(
-            operand_stack,
+            interpreter,
             &function,
             &ty_args,
             loader,
             link_context,
         )?;
-        ParanoidTypeChecker::get_local_types(&function, &ty_args, link_context, loader)?;
+        let resolver = function.get_resolver(link_context, loader);
+        ParanoidTypeChecker::get_local_types(&resolver, &function, &ty_args)?;
         Ok(())
     }
 
     fn check_local_types(
-        operand_stack: &mut OperandStackInterface,
+        interpreter: &mut InterpreterInterface,
         function: &Function,
         ty_args: &[Type],
         loader: &Loader,
@@ -221,7 +221,7 @@ impl ParanoidTypeChecker {
         let is_generic = !ty_args.is_empty();
 
         for i in 0..arg_count {
-            let ty = operand_stack.pop_ty()?;
+            let ty = interpreter.pop_ty()?;
             let resolver = function.get_resolver(link_context, loader);
             if is_generic {
                 ty.check_eq(
@@ -236,15 +236,13 @@ impl ParanoidTypeChecker {
     }
 
     fn get_local_types(
+        resolver: &Resolver,
         function: &Function,
         ty_args: &[Type],
-        link_context: AccountAddress,
-        loader: &Loader,
     ) -> PartialVMResult<Vec<Type>> {
         Ok(if ty_args.is_empty() {
             function.local_types().to_vec()
         } else {
-            let resolver = function.get_resolver(link_context, loader);
             function
                 .local_types()
                 .iter()
@@ -254,18 +252,18 @@ impl ParanoidTypeChecker {
     }
 
     fn native_function(
-        operand_stack: &mut OperandStackInterface,
+        interpreter: &mut InterpreterInterface,
         function: &Function,
         ty_args: &[Type],
         resolver: &Resolver,
     ) -> PartialVMResult<()> {
-        ParanoidTypeChecker::check_parameter_types(operand_stack, &function, ty_args, &resolver)?;
-        ParanoidTypeChecker::push_return_types(operand_stack, &function, &ty_args)?;
+        ParanoidTypeChecker::check_parameter_types(interpreter, &function, ty_args, &resolver)?;
+        ParanoidTypeChecker::push_return_types(interpreter, &function, &ty_args)?;
         Ok(())
     }
 
     fn check_parameter_types(
-        operand_stack: &mut OperandStackInterface,
+        interpreter: &mut InterpreterInterface,
         function: &Function,
         ty_args: &[Type],
         resolver: &Resolver,
@@ -274,34 +272,34 @@ impl ParanoidTypeChecker {
         for i in 0..expected_args {
             let expected_ty =
                 resolver.subst(&function.parameter_types()[expected_args - i - 1], ty_args)?;
-            let ty = operand_stack.pop_ty()?;
+            let ty = interpreter.pop_ty()?;
             ty.check_eq(&expected_ty)?;
         }
         Ok(())
     }
 
     fn push_return_types(
-        operand_stack: &mut OperandStackInterface,
+        interpreter: &mut InterpreterInterface,
         function: &Function,
         ty_args: &[Type],
     ) -> PartialVMResult<()> {
         for ty in function.return_types() {
-            operand_stack.push_ty(ty.subst(ty_args)?)?;
+            interpreter.push_ty(ty.subst(ty_args)?)?;
         }
         Ok(())
     }
 
     fn pre_instr(
-        operand_stack: &mut OperandStackInterface,
+        interpreter: &mut InterpreterInterface,
         local_tys: &[Type],
         locals: &Locals,
         ty_args: &[Type],
         resolver: &Resolver,
         instruction: &Bytecode,
     ) -> PartialVMResult<()> {
-        operand_stack.check_balance()?;
+        interpreter.check_balance()?;
         Self::pre_execution_type_stack_transition(
-            operand_stack,
+            interpreter,
             local_tys,
             locals,
             ty_args,
@@ -312,7 +310,7 @@ impl ParanoidTypeChecker {
     }
 
     fn post_instr(
-        operand_stack: &mut OperandStackInterface,
+        interpreter: &mut InterpreterInterface,
         local_tys: &[Type],
         ty_args: &[Type],
         resolver: &Resolver,
@@ -321,14 +319,14 @@ impl ParanoidTypeChecker {
     ) -> PartialVMResult<()> {
         if let InstrRet::Ok = r {
             Self::post_execution_type_stack_transition(
-                operand_stack,
+                interpreter,
                 local_tys,
                 ty_args,
                 resolver,
                 instruction,
             )?;
 
-            operand_stack.check_balance()?;
+            interpreter.check_balance()?;
         }
         Ok(())
     }
@@ -338,7 +336,7 @@ impl ParanoidTypeChecker {
     /// Note that most of the checks should happen after instruction execution, because gas charging will happen during
     /// instruction execution and we want to avoid running code without charging proper gas as much as possible.
     fn pre_execution_type_stack_transition(
-        operand_stack: &mut OperandStackInterface,
+        interpreter: &mut InterpreterInterface,
         local_tys: &[Type],
         locals: &Locals,
         _ty_args: &[Type],
@@ -349,7 +347,7 @@ impl ParanoidTypeChecker {
             // Call instruction will be checked at execute_main.
             Bytecode::Call(_) | Bytecode::CallGeneric(_) => (),
             Bytecode::BrFalse(_) | Bytecode::BrTrue(_) => {
-                operand_stack.pop_ty()?;
+                interpreter.pop_ty()?;
             }
             Bytecode::Branch(_) => (),
             Bytecode::Ret => {
@@ -360,12 +358,12 @@ impl ParanoidTypeChecker {
                 }
             }
             Bytecode::Abort => {
-                operand_stack.pop_ty()?;
+                interpreter.pop_ty()?;
             }
             // StLoc needs to check before execution as we need to check the drop ability of values.
             Bytecode::StLoc(idx) => {
                 let ty = local_tys[*idx as usize].clone();
-                let val_ty = operand_stack.pop_ty()?;
+                let val_ty = interpreter.pop_ty()?;
                 ty.check_eq(&val_ty)?;
                 if !locals.is_invalid(*idx as usize)? {
                     check_ability(resolver.loader().abilities(&ty)?.has_drop())?;
@@ -449,7 +447,7 @@ impl ParanoidTypeChecker {
     ///
     /// This function and `pre_execution_type_stack_transition` should constitute the full type stack transition for the paranoid mode.
     fn post_execution_type_stack_transition(
-        operand_stack: &mut OperandStackInterface,
+        interpreter: &mut InterpreterInterface,
         local_tys: &[Type],
         ty_args: &[Type],
         resolver: &Resolver,
@@ -466,66 +464,66 @@ impl ParanoidTypeChecker {
                 unreachable!("control flow instruction encountered during type check")
             }
             Bytecode::Pop => {
-                let ty = operand_stack.pop_ty()?;
+                let ty = interpreter.pop_ty()?;
                 check_ability(resolver.loader().abilities(&ty)?.has_drop())?;
             }
-            Bytecode::LdU8(_) => operand_stack.push_ty(Type::U8)?,
-            Bytecode::LdU16(_) => operand_stack.push_ty(Type::U16)?,
-            Bytecode::LdU32(_) => operand_stack.push_ty(Type::U32)?,
-            Bytecode::LdU64(_) => operand_stack.push_ty(Type::U64)?,
-            Bytecode::LdU128(_) => operand_stack.push_ty(Type::U128)?,
-            Bytecode::LdU256(_) => operand_stack.push_ty(Type::U256)?,
-            Bytecode::LdTrue | Bytecode::LdFalse => operand_stack.push_ty(Type::Bool)?,
+            Bytecode::LdU8(_) => interpreter.push_ty(Type::U8)?,
+            Bytecode::LdU16(_) => interpreter.push_ty(Type::U16)?,
+            Bytecode::LdU32(_) => interpreter.push_ty(Type::U32)?,
+            Bytecode::LdU64(_) => interpreter.push_ty(Type::U64)?,
+            Bytecode::LdU128(_) => interpreter.push_ty(Type::U128)?,
+            Bytecode::LdU256(_) => interpreter.push_ty(Type::U256)?,
+            Bytecode::LdTrue | Bytecode::LdFalse => interpreter.push_ty(Type::Bool)?,
             Bytecode::LdConst(i) => {
                 let constant = resolver.constant_at(*i);
-                operand_stack.push_ty(Type::from_const_signature(&constant.type_)?)?;
+                interpreter.push_ty(Type::from_const_signature(&constant.type_)?)?;
             }
             Bytecode::CopyLoc(idx) => {
                 let ty = local_tys[*idx as usize].clone();
                 check_ability(resolver.loader().abilities(&ty)?.has_copy())?;
-                operand_stack.push_ty(ty)?;
+                interpreter.push_ty(ty)?;
             }
             Bytecode::MoveLoc(idx) => {
                 let ty = local_tys[*idx as usize].clone();
-                operand_stack.push_ty(ty)?;
+                interpreter.push_ty(ty)?;
             }
             Bytecode::StLoc(_) => (),
             Bytecode::MutBorrowLoc(idx) => {
                 let ty = local_tys[*idx as usize].clone();
-                operand_stack.push_ty(Type::MutableReference(Box::new(ty)))?;
+                interpreter.push_ty(Type::MutableReference(Box::new(ty)))?;
             }
             Bytecode::ImmBorrowLoc(idx) => {
                 let ty = local_tys[*idx as usize].clone();
-                operand_stack.push_ty(Type::Reference(Box::new(ty)))?;
+                interpreter.push_ty(Type::Reference(Box::new(ty)))?;
             }
             Bytecode::ImmBorrowField(fh_idx) => {
                 let expected_ty = resolver.field_handle_to_struct(*fh_idx);
-                let top_ty = operand_stack.pop_ty()?;
+                let top_ty = interpreter.pop_ty()?;
                 top_ty.check_ref_eq(&expected_ty)?;
-                operand_stack
+                interpreter
                     .push_ty(Type::Reference(Box::new(resolver.get_field_type(*fh_idx)?)))?;
             }
             Bytecode::MutBorrowField(fh_idx) => {
                 let expected_ty = resolver.field_handle_to_struct(*fh_idx);
-                let top_ty = operand_stack.pop_ty()?;
+                let top_ty = interpreter.pop_ty()?;
                 top_ty.check_eq(&Type::MutableReference(Box::new(expected_ty)))?;
-                operand_stack.push_ty(Type::MutableReference(Box::new(
+                interpreter.push_ty(Type::MutableReference(Box::new(
                     resolver.get_field_type(*fh_idx)?,
                 )))?;
             }
             Bytecode::ImmBorrowFieldGeneric(idx) => {
                 let expected_ty = resolver.field_instantiation_to_struct(*idx, ty_args)?;
-                let top_ty = operand_stack.pop_ty()?;
+                let top_ty = interpreter.pop_ty()?;
                 top_ty.check_ref_eq(&expected_ty)?;
-                operand_stack.push_ty(Type::Reference(Box::new(
+                interpreter.push_ty(Type::Reference(Box::new(
                     resolver.instantiate_generic_field(*idx, ty_args)?,
                 )))?;
             }
             Bytecode::MutBorrowFieldGeneric(idx) => {
                 let expected_ty = resolver.field_instantiation_to_struct(*idx, ty_args)?;
-                let top_ty = operand_stack.pop_ty()?;
+                let top_ty = interpreter.pop_ty()?;
                 top_ty.check_eq(&Type::MutableReference(Box::new(expected_ty)))?;
-                operand_stack.push_ty(Type::MutableReference(Box::new(
+                interpreter.push_ty(Type::MutableReference(Box::new(
                     resolver.instantiate_generic_field(*idx, ty_args)?,
                 )))?;
             }
@@ -551,7 +549,7 @@ impl ParanoidTypeChecker {
                     );
                 }
 
-                for (ty, expected_ty) in operand_stack
+                for (ty, expected_ty) in interpreter
                     .popn_tys(field_count)?
                     .into_iter()
                     .zip(args_ty.fields.iter())
@@ -564,7 +562,7 @@ impl ParanoidTypeChecker {
                     ty.check_eq(expected_ty)?;
                 }
 
-                operand_stack.push_ty(output_ty)?;
+                interpreter.push_ty(output_ty)?;
             }
             Bytecode::PackGeneric(idx) => {
                 let field_count = resolver.field_instantiation_count(*idx);
@@ -588,7 +586,7 @@ impl ParanoidTypeChecker {
                     );
                 }
 
-                for (ty, expected_ty) in operand_stack
+                for (ty, expected_ty) in interpreter
                     .popn_tys(field_count)?
                     .into_iter()
                     .zip(args_ty.iter())
@@ -601,31 +599,31 @@ impl ParanoidTypeChecker {
                     ty.check_eq(expected_ty)?;
                 }
 
-                operand_stack.push_ty(output_ty)?;
+                interpreter.push_ty(output_ty)?;
             }
             Bytecode::Unpack(idx) => {
-                let struct_ty = operand_stack.pop_ty()?;
+                let struct_ty = interpreter.pop_ty()?;
                 struct_ty.check_eq(&resolver.get_struct_type(*idx))?;
                 let struct_decl = resolver.get_struct_fields(*idx)?;
                 for ty in struct_decl.fields.iter() {
-                    operand_stack.push_ty(ty.clone())?;
+                    interpreter.push_ty(ty.clone())?;
                 }
             }
             Bytecode::UnpackGeneric(idx) => {
-                let struct_ty = operand_stack.pop_ty()?;
+                let struct_ty = interpreter.pop_ty()?;
                 struct_ty.check_eq(&resolver.instantiate_generic_type(*idx, ty_args)?)?;
 
                 let struct_decl = resolver.instantiate_generic_struct_fields(*idx, ty_args)?;
                 for ty in struct_decl.into_iter() {
-                    operand_stack.push_ty(ty.clone())?;
+                    interpreter.push_ty(ty.clone())?;
                 }
             }
             Bytecode::ReadRef => {
-                let ref_ty = operand_stack.pop_ty()?;
+                let ref_ty = interpreter.pop_ty()?;
                 match ref_ty {
                     Type::Reference(inner) | Type::MutableReference(inner) => {
                         check_ability(resolver.loader().abilities(&inner)?.has_copy())?;
-                        operand_stack.push_ty(inner.as_ref().clone())?;
+                        interpreter.push_ty(inner.as_ref().clone())?;
                     }
                     _ => {
                         return Err(PartialVMError::new(
@@ -636,8 +634,8 @@ impl ParanoidTypeChecker {
                 }
             }
             Bytecode::WriteRef => {
-                let ref_ty = operand_stack.pop_ty()?;
-                let val_ty = operand_stack.pop_ty()?;
+                let ref_ty = interpreter.pop_ty()?;
+                let val_ty = interpreter.pop_ty()?;
                 match ref_ty {
                     Type::MutableReference(inner) => {
                         if *inner == val_ty {
@@ -662,28 +660,28 @@ impl ParanoidTypeChecker {
                 }
             }
             Bytecode::CastU8 => {
-                operand_stack.pop_ty()?;
-                operand_stack.push_ty(Type::U8)?;
+                interpreter.pop_ty()?;
+                interpreter.push_ty(Type::U8)?;
             }
             Bytecode::CastU16 => {
-                operand_stack.pop_ty()?;
-                operand_stack.push_ty(Type::U16)?;
+                interpreter.pop_ty()?;
+                interpreter.push_ty(Type::U16)?;
             }
             Bytecode::CastU32 => {
-                operand_stack.pop_ty()?;
-                operand_stack.push_ty(Type::U32)?;
+                interpreter.pop_ty()?;
+                interpreter.push_ty(Type::U32)?;
             }
             Bytecode::CastU64 => {
-                operand_stack.pop_ty()?;
-                operand_stack.push_ty(Type::U64)?;
+                interpreter.pop_ty()?;
+                interpreter.push_ty(Type::U64)?;
             }
             Bytecode::CastU128 => {
-                operand_stack.pop_ty()?;
-                operand_stack.push_ty(Type::U128)?;
+                interpreter.pop_ty()?;
+                interpreter.push_ty(Type::U128)?;
             }
             Bytecode::CastU256 => {
-                operand_stack.pop_ty()?;
-                operand_stack.push_ty(Type::U256)?;
+                interpreter.pop_ty()?;
+                interpreter.push_ty(Type::U256)?;
             }
             Bytecode::Add
             | Bytecode::Sub
@@ -695,25 +693,25 @@ impl ParanoidTypeChecker {
             | Bytecode::Xor
             | Bytecode::Or
             | Bytecode::And => {
-                let lhs = operand_stack.pop_ty()?;
-                let rhs = operand_stack.pop_ty()?;
+                let lhs = interpreter.pop_ty()?;
+                let rhs = interpreter.pop_ty()?;
                 lhs.check_eq(&rhs)?;
-                operand_stack.push_ty(lhs)?;
+                interpreter.push_ty(lhs)?;
             }
             Bytecode::Shl | Bytecode::Shr => {
-                operand_stack.pop_ty()?;
-                let rhs = operand_stack.pop_ty()?;
-                operand_stack.push_ty(rhs)?;
+                interpreter.pop_ty()?;
+                let rhs = interpreter.pop_ty()?;
+                interpreter.push_ty(rhs)?;
             }
             Bytecode::Lt | Bytecode::Le | Bytecode::Gt | Bytecode::Ge => {
-                let lhs = operand_stack.pop_ty()?;
-                let rhs = operand_stack.pop_ty()?;
+                let lhs = interpreter.pop_ty()?;
+                let rhs = interpreter.pop_ty()?;
                 lhs.check_eq(&rhs)?;
-                operand_stack.push_ty(Type::Bool)?;
+                interpreter.push_ty(Type::Bool)?;
             }
             Bytecode::Eq | Bytecode::Neq => {
-                let lhs = operand_stack.pop_ty()?;
-                let rhs = operand_stack.pop_ty()?;
+                let lhs = interpreter.pop_ty()?;
+                let rhs = interpreter.pop_ty()?;
                 if lhs != rhs {
                     return Err(
                         PartialVMError::new(StatusCode::UNKNOWN_INVARIANT_VIOLATION_ERROR)
@@ -724,67 +722,67 @@ impl ParanoidTypeChecker {
                     );
                 }
                 check_ability(resolver.loader().abilities(&lhs)?.has_drop())?;
-                operand_stack.push_ty(Type::Bool)?;
+                interpreter.push_ty(Type::Bool)?;
             }
             Bytecode::MutBorrowGlobal(idx) => {
-                operand_stack.pop_ty()?.check_eq(&Type::Address)?;
+                interpreter.pop_ty()?.check_eq(&Type::Address)?;
                 let ty = resolver.get_struct_type(*idx);
                 check_ability(resolver.loader().abilities(&ty)?.has_key())?;
-                operand_stack.push_ty(Type::MutableReference(Box::new(ty)))?;
+                interpreter.push_ty(Type::MutableReference(Box::new(ty)))?;
             }
             Bytecode::ImmBorrowGlobal(idx) => {
-                operand_stack.pop_ty()?.check_eq(&Type::Address)?;
+                interpreter.pop_ty()?.check_eq(&Type::Address)?;
                 let ty = resolver.get_struct_type(*idx);
                 check_ability(resolver.loader().abilities(&ty)?.has_key())?;
-                operand_stack.push_ty(Type::Reference(Box::new(ty)))?;
+                interpreter.push_ty(Type::Reference(Box::new(ty)))?;
             }
             Bytecode::MutBorrowGlobalGeneric(idx) => {
-                operand_stack.pop_ty()?.check_eq(&Type::Address)?;
+                interpreter.pop_ty()?.check_eq(&Type::Address)?;
                 let ty = resolver.instantiate_generic_type(*idx, ty_args)?;
                 check_ability(resolver.loader().abilities(&ty)?.has_key())?;
-                operand_stack.push_ty(Type::MutableReference(Box::new(ty)))?;
+                interpreter.push_ty(Type::MutableReference(Box::new(ty)))?;
             }
             Bytecode::ImmBorrowGlobalGeneric(idx) => {
-                operand_stack.pop_ty()?.check_eq(&Type::Address)?;
+                interpreter.pop_ty()?.check_eq(&Type::Address)?;
                 let ty = resolver.instantiate_generic_type(*idx, ty_args)?;
                 check_ability(resolver.loader().abilities(&ty)?.has_key())?;
-                operand_stack.push_ty(Type::Reference(Box::new(ty)))?;
+                interpreter.push_ty(Type::Reference(Box::new(ty)))?;
             }
             Bytecode::Exists(_) | Bytecode::ExistsGeneric(_) => {
-                operand_stack.pop_ty()?.check_eq(&Type::Address)?;
-                operand_stack.push_ty(Type::Bool)?;
+                interpreter.pop_ty()?.check_eq(&Type::Address)?;
+                interpreter.push_ty(Type::Bool)?;
             }
             Bytecode::MoveTo(idx) => {
-                let ty = operand_stack.pop_ty()?;
-                operand_stack
+                let ty = interpreter.pop_ty()?;
+                interpreter
                     .pop_ty()?
                     .check_eq(&Type::Reference(Box::new(Type::Signer)))?;
                 ty.check_eq(&resolver.get_struct_type(*idx))?;
                 check_ability(resolver.loader().abilities(&ty)?.has_key())?;
             }
             Bytecode::MoveToGeneric(idx) => {
-                let ty = operand_stack.pop_ty()?;
-                operand_stack
+                let ty = interpreter.pop_ty()?;
+                interpreter
                     .pop_ty()?
                     .check_eq(&Type::Reference(Box::new(Type::Signer)))?;
                 ty.check_eq(&resolver.instantiate_generic_type(*idx, ty_args)?)?;
                 check_ability(resolver.loader().abilities(&ty)?.has_key())?;
             }
             Bytecode::MoveFrom(idx) => {
-                operand_stack.pop_ty()?.check_eq(&Type::Address)?;
+                interpreter.pop_ty()?.check_eq(&Type::Address)?;
                 let ty = resolver.get_struct_type(*idx);
                 check_ability(resolver.loader().abilities(&ty)?.has_key())?;
-                operand_stack.push_ty(ty)?;
+                interpreter.push_ty(ty)?;
             }
             Bytecode::MoveFromGeneric(idx) => {
-                operand_stack.pop_ty()?.check_eq(&Type::Address)?;
+                interpreter.pop_ty()?.check_eq(&Type::Address)?;
                 let ty = resolver.instantiate_generic_type(*idx, ty_args)?;
                 check_ability(resolver.loader().abilities(&ty)?.has_key())?;
-                operand_stack.push_ty(ty)?;
+                interpreter.push_ty(ty)?;
             }
             Bytecode::FreezeRef => {
-                match operand_stack.pop_ty()? {
-                    Type::MutableReference(ty) => operand_stack.push_ty(Type::Reference(ty))?,
+                match interpreter.pop_ty()? {
+                    Type::MutableReference(ty) => interpreter.push_ty(Type::Reference(ty))?,
                     _ => {
                         return Err(PartialVMError::new(
                             StatusCode::UNKNOWN_INVARIANT_VIOLATION_ERROR,
@@ -795,52 +793,52 @@ impl ParanoidTypeChecker {
             }
             Bytecode::Nop => (),
             Bytecode::Not => {
-                operand_stack.pop_ty()?.check_eq(&Type::Bool)?;
-                operand_stack.push_ty(Type::Bool)?;
+                interpreter.pop_ty()?.check_eq(&Type::Bool)?;
+                interpreter.push_ty(Type::Bool)?;
             }
             Bytecode::VecPack(si, num) => {
                 let ty = resolver.instantiate_single_type(*si, ty_args)?;
-                let elem_tys = operand_stack.popn_tys(*num as u16)?;
+                let elem_tys = interpreter.popn_tys(*num as u16)?;
                 for elem_ty in elem_tys.iter() {
                     elem_ty.check_eq(&ty)?;
                 }
-                operand_stack.push_ty(Type::Vector(Box::new(ty)))?;
+                interpreter.push_ty(Type::Vector(Box::new(ty)))?;
             }
             Bytecode::VecLen(si) => {
                 let ty = resolver.instantiate_single_type(*si, ty_args)?;
-                operand_stack.pop_ty()?.check_vec_ref(&ty, false)?;
-                operand_stack.push_ty(Type::U64)?;
+                interpreter.pop_ty()?.check_vec_ref(&ty, false)?;
+                interpreter.push_ty(Type::U64)?;
             }
             Bytecode::VecImmBorrow(si) => {
                 let ty = resolver.instantiate_single_type(*si, ty_args)?;
-                operand_stack.pop_ty()?.check_eq(&Type::U64)?;
-                let inner_ty = operand_stack.pop_ty()?.check_vec_ref(&ty, false)?;
-                operand_stack.push_ty(Type::Reference(Box::new(inner_ty)))?;
+                interpreter.pop_ty()?.check_eq(&Type::U64)?;
+                let inner_ty = interpreter.pop_ty()?.check_vec_ref(&ty, false)?;
+                interpreter.push_ty(Type::Reference(Box::new(inner_ty)))?;
             }
             Bytecode::VecMutBorrow(si) => {
                 let ty = resolver.instantiate_single_type(*si, ty_args)?;
-                operand_stack.pop_ty()?.check_eq(&Type::U64)?;
-                let inner_ty = operand_stack.pop_ty()?.check_vec_ref(&ty, true)?;
-                operand_stack.push_ty(Type::MutableReference(Box::new(inner_ty)))?;
+                interpreter.pop_ty()?.check_eq(&Type::U64)?;
+                let inner_ty = interpreter.pop_ty()?.check_vec_ref(&ty, true)?;
+                interpreter.push_ty(Type::MutableReference(Box::new(inner_ty)))?;
             }
             Bytecode::VecPushBack(si) => {
                 let ty = resolver.instantiate_single_type(*si, ty_args)?;
-                operand_stack.pop_ty()?.check_eq(&ty)?;
-                operand_stack.pop_ty()?.check_vec_ref(&ty, true)?;
+                interpreter.pop_ty()?.check_eq(&ty)?;
+                interpreter.pop_ty()?.check_vec_ref(&ty, true)?;
             }
             Bytecode::VecPopBack(si) => {
                 let ty = resolver.instantiate_single_type(*si, ty_args)?;
-                let inner_ty = operand_stack.pop_ty()?.check_vec_ref(&ty, true)?;
-                operand_stack.push_ty(inner_ty)?;
+                let inner_ty = interpreter.pop_ty()?.check_vec_ref(&ty, true)?;
+                interpreter.push_ty(inner_ty)?;
             }
             Bytecode::VecUnpack(si, num) => {
                 let ty = resolver.instantiate_single_type(*si, ty_args)?;
-                let vec_ty = operand_stack.pop_ty()?;
+                let vec_ty = interpreter.pop_ty()?;
                 match vec_ty {
                     Type::Vector(v) => {
                         v.check_eq(&ty)?;
                         for _ in 0..*num {
-                            operand_stack.push_ty(v.as_ref().clone())?;
+                            interpreter.push_ty(v.as_ref().clone())?;
                         }
                     }
                     _ => {
@@ -853,9 +851,9 @@ impl ParanoidTypeChecker {
             }
             Bytecode::VecSwap(si) => {
                 let ty = resolver.instantiate_single_type(*si, ty_args)?;
-                operand_stack.pop_ty()?.check_eq(&Type::U64)?;
-                operand_stack.pop_ty()?.check_eq(&Type::U64)?;
-                operand_stack.pop_ty()?.check_vec_ref(&ty, true)?;
+                interpreter.pop_ty()?.check_eq(&Type::U64)?;
+                interpreter.pop_ty()?.check_eq(&Type::U64)?;
+                interpreter.pop_ty()?.check_vec_ref(&ty, true)?;
             }
         }
         Ok(())
