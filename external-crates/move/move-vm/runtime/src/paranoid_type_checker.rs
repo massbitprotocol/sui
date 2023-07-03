@@ -67,14 +67,23 @@ impl ParanoidTypeChecker {
             let resolver = function.get_resolver(link_context, loader);
             ParanoidTypeChecker::native_function(interpreter, &function, ty_args, &resolver)
                 .map_err(|e| match function.module_id() {
-                    Some(id) => e
-                        .at_code_offset(function.index(), 0)
-                        .finish(Location::Module(id.clone())),
-                    None => PartialVMError::new(StatusCode::UNKNOWN_INVARIANT_VIOLATION_ERROR)
-                        .with_message(
-                            "Unexpected native function not located in a module".to_owned(),
-                        )
-                        .finish(Location::Undefined),
+                    Some(id) => {
+                        let e = if resolver.loader().vm_config().error_execution_state {
+                            e.with_exec_state(interpreter.get_internal_state())
+                        } else {
+                            e
+                        };
+                        e.at_code_offset(function.index(), 0)
+                            .finish(Location::Module(id.clone()))
+                    }
+                    None => {
+                        let err =
+                            PartialVMError::new(StatusCode::UNKNOWN_INVARIANT_VIOLATION_ERROR)
+                                .with_message(
+                                    "Unexpected native function not located in a module".to_owned(),
+                                );
+                        interpreter.set_location(err)
+                    }
                 })?;
         } else {
             ParanoidTypeChecker::non_native_function(

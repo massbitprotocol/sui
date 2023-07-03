@@ -126,6 +126,10 @@ impl<'a> InterpreterInterface<'a> {
     pub fn maybe_core_dump(&self, err: VMError, current_frame: &Frame) -> VMError {
         self.interpreter.maybe_core_dump(err, current_frame)
     }
+
+    pub fn get_internal_state(&self) -> ExecutionState {
+        self.interpreter.get_internal_state()
+    }
 }
 
 impl Interpreter {
@@ -148,13 +152,15 @@ impl Interpreter {
     ) -> VMResult<()> {
         profile_open_frame!(gas_meter, function.pretty_string());
 
-        ParanoidTypeChecker::pre_hook_entrypoint(
-            &mut interpreter.interpreter_interface(),
-            function,
-            ty_args,
-            data_store.link_context(),
-            loader,
-        )?;
+        if interpreter.paranoid_type_checks {
+            ParanoidTypeChecker::pre_hook_entrypoint(
+                &mut interpreter.interpreter_interface(),
+                function,
+                ty_args,
+                data_store.link_context(),
+                loader,
+            )?;
+        }
 
         Ok(())
     }
@@ -172,14 +178,16 @@ impl Interpreter {
         profile_open_frame!(gas_meter, function.pretty_string());
         let mut frame_interface = current_frame.frame_interface();
 
-        ParanoidTypeChecker::pre_hook_fn(
-            &mut interpreter.interpreter_interface(),
-            &mut frame_interface,
-            function,
-            ty_args,
-            data_store.link_context(),
-            loader,
-        )?;
+        if interpreter.paranoid_type_checks {
+            ParanoidTypeChecker::pre_hook_fn(
+                &mut interpreter.interpreter_interface(),
+                &mut frame_interface,
+                function,
+                ty_args,
+                data_store.link_context(),
+                loader,
+            )?;
+        }
 
         Ok(())
     }
@@ -197,15 +205,17 @@ impl Interpreter {
         resolver: &Resolver,
         interpreter: &mut Interpreter,
     ) -> PartialVMResult<()> {
-        ParanoidTypeChecker::pre_hook_instr(
-            &mut interpreter.interpreter_interface(),
-            gas_meter,
-            function,
-            instruction,
-            locals,
-            ty_args,
-            resolver,
-        )?;
+        if interpreter.paranoid_type_checks {
+            ParanoidTypeChecker::pre_hook_instr(
+                &mut interpreter.interpreter_interface(),
+                gas_meter,
+                function,
+                instruction,
+                locals,
+                ty_args,
+                resolver,
+            )?;
+        }
         profile_open_instr!(gas_meter, format!("{:?}", instruction));
         Ok(())
     }
@@ -220,15 +230,17 @@ impl Interpreter {
         r: &InstrRet,
     ) -> PartialVMResult<()> {
         profile_close_instr!(gas_meter, format!("{:?}", instruction));
-        ParanoidTypeChecker::post_hook_instr(
-            &mut interpreter.interpreter_interface(),
-            gas_meter,
-            function,
-            instruction,
-            ty_args,
-            resolver,
-            r,
-        )?;
+        if interpreter.paranoid_type_checks {
+            ParanoidTypeChecker::post_hook_instr(
+                &mut interpreter.interpreter_interface(),
+                gas_meter,
+                function,
+                instruction,
+                ty_args,
+                resolver,
+                r,
+            )?;
+        }
         Ok(())
     }
 
@@ -257,7 +269,7 @@ impl Interpreter {
             &ty_args,
             data_store,
             loader,
-        );
+        )?;
 
         if function.is_native() {
             for arg in args {
@@ -371,7 +383,7 @@ impl Interpreter {
                         gas_meter,
                         &func,
                         &ty_args,
-                    );
+                    )?;
 
                     // Charge gas
                     let module_id = func
@@ -432,7 +444,7 @@ impl Interpreter {
                         gas_meter,
                         &func,
                         &ty_args,
-                    );
+                    )?;
 
                     // Charge gas
                     let module_id = func
@@ -1826,7 +1838,7 @@ impl Frame {
                     &self.ty_args,
                     resolver,
                     interpreter,
-                );
+                )?;
 
                 let r = Self::execute_instruction(
                     &mut self.pc,
@@ -1848,7 +1860,7 @@ impl Frame {
                     resolver,
                     interpreter,
                     &r,
-                );
+                )?;
 
                 match r {
                     InstrRet::Ok => (),
