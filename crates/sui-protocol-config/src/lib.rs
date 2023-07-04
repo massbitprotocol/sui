@@ -1314,6 +1314,7 @@ impl ProtocolConfig {
                 cfg.feature_flags.txn_base_cost_as_multiplier = true;
                 // this is a multiplier of the gas price
                 cfg.base_tx_cost_fixed = Some(1_000);
+                cfg.feature_flags.narwhal_new_leader_election_schedule = true;
                 cfg
             }
             // Use this template when making changes:
