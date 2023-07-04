@@ -77,7 +77,7 @@ function NFTDetailsPage() {
 						<PageTitle back="/nfts" />
 						<div className="flex flex-1 flex-col flex-nowrap items-stretch gap-8">
 							<div className="flex flex-col flex-nowrap items-center gap-3 self-center">
-								<NFTDisplayCard objectId={nftId!} size="lg" borderRadius="xl" playable />
+								<NFTDisplayCard objectId={nftId!} size="xl" borderRadius="xl" playable />
 								{nftId ? (
 									<Link
 										color="steelDark"

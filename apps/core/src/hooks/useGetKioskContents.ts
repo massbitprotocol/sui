@@ -107,7 +107,10 @@ export function useGetKioskContents(address?: SuiAddress | null, disableOriginBy
 		queryFn: async () => {
 			const suiKiosks = await getSuiKioskContents(address!, rpc);
 			const obKioskContents = await getOriginByteKioskContents(address!, rpc);
-			const list = Array.from((suiKiosks ?? []).values()).flatMap((d) => d.items);
+			const list = [
+				...Array.from((suiKiosks ?? []).values()),
+				...Array.from(obKioskContents.values() ?? []),
+			].flatMap((d) => d.items);
 			return {
 				list,
 				kiosks: {

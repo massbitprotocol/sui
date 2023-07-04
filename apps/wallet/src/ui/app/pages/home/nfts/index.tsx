@@ -75,7 +75,7 @@ function NftsPage() {
 								<ErrorBoundary>
 									<NFTDisplayCard
 										objectId={object.objectId}
-										size="md"
+										size="lg"
 										showLabel
 										animateHover
 										borderRadius="xl"
@@ -100,7 +100,7 @@ function NftsPage() {
 								<ErrorBoundary>
 									<NFTDisplayCard
 										objectId={objectId}
-										size="md"
+										size="lg"
 										showLabel
 										animateHover
 										borderRadius="xl"

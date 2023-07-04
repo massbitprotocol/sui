@@ -96,7 +96,7 @@ export function NFTDisplayCard({
 							animateHover ? 'group-hover:text-black duration-200 ease-ease-in-out-cubic' : '',
 						)}
 					>
-						{nftName}
+						{isOwnerToken ? 'Kiosk' : nftName}
 					</div>
 				)}
 			</Loading>
