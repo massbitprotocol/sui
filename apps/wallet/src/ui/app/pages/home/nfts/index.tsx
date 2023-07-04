@@ -59,6 +59,30 @@ function NftsPage() {
 
 				{nfts?.ownedObjects.length ? (
 					<div className="grid w-full grid-cols-2 gap-x-3.5 gap-y-4">
+						{nfts.kioskOwnerTokens?.map((object) => (
+							<Link
+								to={`/kiosk?${new URLSearchParams({
+									kioskId:
+										object && object.content && 'fields' in object.content
+											? object.content.fields.kiosk ||
+											  (object.content && 'fields' in object.content && object.content.fields.for)
+											: null,
+								}).toString()}`}
+								onClick={() => {}}
+								key={object.objectId}
+								className="no-underline"
+							>
+								<ErrorBoundary>
+									<NFTDisplayCard
+										objectId={object.objectId}
+										size="md"
+										showLabel
+										animateHover
+										borderRadius="xl"
+									/>
+								</ErrorBoundary>
+							</Link>
+						))}
 						{nfts.ownedObjects.map(({ objectId, type }) => (
 							<Link
 								to={`/nft-details?${new URLSearchParams({
@@ -76,7 +100,6 @@ function NftsPage() {
 								<ErrorBoundary>
 									<NFTDisplayCard
 										objectId={objectId}
-										objectType={type}
 										size="md"
 										showLabel
 										animateHover

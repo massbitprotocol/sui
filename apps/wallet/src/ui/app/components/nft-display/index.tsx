@@ -14,7 +14,7 @@ import { useGetNFTMeta, useFileExtensionType } from '_hooks';
 
 import type { VariantProps } from 'class-variance-authority';
 
-const nftDisplayCardStyles = cva('flex flex-nowrap items-center h-full', {
+const nftDisplayCardStyles = cva('relative flex flex-nowrap items-center h-full', {
 	variants: {
 		animateHover: {
 			true: 'group',
@@ -58,7 +58,48 @@ export function NFTDisplayCard({
 
 	return (
 		<div className={nftDisplayCardStyles({ animateHover, wideView })}>
-			<Loading loading={isLoading}>{isOwnerToken ? <Kiosk object={objectData} /> : null}</Loading>
+			<Loading loading={isLoading}>
+				{video && playable ? (
+					<video controls className="h-full w-full rounded-md overflow-hidden" src={video} />
+				) : isOwnerToken ? (
+					<Kiosk object={objectData} />
+				) : (
+					<NftImage
+						name={nftName}
+						src={nftImageUrl}
+						title={nftMeta?.description || ''}
+						animateHover={true}
+						showLabel={!wideView}
+						borderRadius={borderRadius}
+						size={size}
+						video={video}
+					/>
+				)}
+				{wideView && (
+					<div className="flex flex-col gap-1 flex-1 min-w-0 ml-1">
+						<Heading variant="heading6" color="gray-90" truncate>
+							{nftName}
+						</Heading>
+						<div className="text-gray-75 text-body font-medium">
+							{nftImageUrl ? (
+								`${fileExtensionType.name} ${fileExtensionType.type}`
+							) : (
+								<span className="uppercase font-normal text-bodySmall">NO MEDIA</span>
+							)}
+						</div>
+					</div>
+				)}
+				{showLabel && !wideView && (
+					<div
+						className={cx(
+							'flex-1 mt-2 text-steel-dark truncate overflow-hidden max-w-full',
+							animateHover ? 'group-hover:text-black duration-200 ease-ease-in-out-cubic' : '',
+						)}
+					>
+						{nftName}
+					</div>
+				)}
+			</Loading>
 		</div>
 	);
 }

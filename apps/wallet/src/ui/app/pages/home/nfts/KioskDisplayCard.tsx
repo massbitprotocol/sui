@@ -5,7 +5,7 @@ import { useGetObject } from '@mysten/core';
 import { formatAddress } from '@mysten/sui.js';
 import { cva, cx } from 'class-variance-authority';
 
-import { useResolveVideo } from '../../hooks/useResolveVideo';
+import { useResolveVideo } from '../../../hooks/useResolveVideo';
 import { Heading } from '_app/shared/heading';
 import Loading from '_components/loading';
 import { NftImage, type NftImageProps } from '_components/nft-display/NftImage';
