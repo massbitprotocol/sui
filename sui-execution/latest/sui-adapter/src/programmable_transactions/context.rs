@@ -358,12 +358,17 @@ impl<'vm, 'state, 'a> ExecutionContext<'vm, 'state, 'a> {
         {
             return Err(CommandArgumentError::InvalidGasCoinUsage);
         }
+
         match input_metadata_opt {
             Some(InputObjectMetadata { owner: Owner::Immutable, .. }) => {
                 return Err(CommandArgumentError::InvalidObjectByValue)
             }
             Some(InputObjectMetadata { owner: Owner::Shared {..}, .. })
             if !protocol_config.shared_object_deletion() => {
+                return Err(CommandArgumentError::InvalidObjectByValue)
+            }
+            Some(InputObjectMetadata { owner: Owner::Shared {..}, .. })
+            if protocol_config.shared_object_deletion() && matches!(command_kind, CommandKind::TransferObjects) => {
                 return Err(CommandArgumentError::InvalidObjectByValue)
             }
             _ => {}

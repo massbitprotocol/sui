@@ -244,6 +244,11 @@ pub enum CommandArgumentError {
     InvalidObjectByValue,
     #[error("Immutable objects cannot be passed by mutable reference, &mut.")]
     InvalidObjectByMutRef,
+    #[error(
+        "Shared object operations such a wrapping, freezing, or converting to owned are not \
+    allowed."
+    )]
+    SharedObjectOperationNotAllowed,
 }
 
 #[derive(Eq, PartialEq, Clone, Debug, Serialize, Deserialize, Hash, Error)]

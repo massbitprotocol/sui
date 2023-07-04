@@ -168,12 +168,11 @@ pub fn object_is_shared(context: &mut NativeContext, obj: &Value) -> PartialVMRe
         .value_as::<AccountAddress>()?
         .into();
 
-    if let Some(owner) = obj_runtime.state.input_objects.get(&id) {
-        if owner.is_shared() {
-            return Ok(true);
-        }
-    };
-    Ok(false)
+    Ok(obj_runtime
+        .state
+        .input_objects
+        .get(&id)
+        .is_some_and(|owner| owner.is_shared()))
 }
 
 fn object_runtime_transfer(
