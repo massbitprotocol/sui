@@ -1,15 +1,8 @@
 // Copyright (c) Mysten Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-import {
-	useGetOwnedObjects,
-	hasDisplayData,
-	useGetKioskContents,
-	isKioskOwnerToken,
-} from '@mysten/core';
+import { useGetOwnedObjects } from '@mysten/core';
 import { type SuiObjectData, type SuiAddress } from '@mysten/sui.js';
-
-import useAppSelector from './useAppSelector';
 
 export function useGetNFTs(address?: SuiAddress | null) {
 	const {
@@ -29,39 +22,36 @@ export function useGetNFTs(address?: SuiAddress | null) {
 		50,
 	);
 
-	const { apiEnv } = useAppSelector((state) => state.app);
-	const disableOriginByteKiosk = apiEnv !== 'mainnet';
+	const ownedAssets =
+		data?.pages.flatMap((page) => page.data).map(({ data }) => data as SuiObjectData) ?? [];
 
-	const { data: kioskData, isLoading: areKioskContentsLoading } = useGetKioskContents(
-		address,
-		disableOriginByteKiosk,
-	);
+	// const flat = data?.pages.flatMap((page) => page.data) ?? [];
+	// const { kioskOwnerTokens, ownedObjects } = flat.reduce(
+	// 	(acc, curr) => {
+	// 		if (!curr.data) return acc;
 
-	const kioskOwnerTokens = data?.pages
-		.flatMap((page) => page.data)
-		.filter(isKioskOwnerToken)
-		.map(({ data }) => data as SuiObjectData);
+	// 		if (isKioskOwnerToken(curr)) {
+	// 			acc.kioskOwnerTokens.push(curr.data);
+	// 			return acc;
+	// 		}
+	// 		acc.ownedObjects.push(curr.data);
+	// 		return acc;
+	// 	},
+	// 	{ kioskOwnerTokens: [], ownedObjects: [] } as OwnedAssets,
+	// );
 
-	const kiosks = Object.entries(kioskData?.kiosks ?? {}).map(([kioskId, kiosk]) => kiosk);
-
-	const nfts = {
-		kioskOwnerTokens,
-		kiosks,
-		ownedObjects:
-			data?.pages
-				.flatMap((page) => page.data)
-				.filter((object) => !isKioskOwnerToken(object))
-				.filter(hasDisplayData)
-				.map(({ data }) => data as SuiObjectData) || [],
-	};
+	// const nfts = {
+	// 	kioskOwnerTokens,
+	// 	ownedObjects,
+	// };
 
 	return {
-		data: nfts,
+		data: ownedAssets,
 		isInitialLoading,
 		hasNextPage,
 		isFetchingNextPage,
 		fetchNextPage,
-		isLoading: isLoading || areKioskContentsLoading,
+		isLoading: isLoading,
 		isError: isError,
 		error,
 	};

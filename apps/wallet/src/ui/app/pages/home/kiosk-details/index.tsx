@@ -5,13 +5,13 @@ import { hasDisplayData, useGetKioskContents } from '@mysten/core';
 import { formatAddress } from '@mysten/sui.js';
 import { useSearchParams, Link } from 'react-router-dom';
 
-import { NFTDisplayCard } from '../nfts/KioskDisplayCard';
 import { useActiveAddress } from '_app/hooks/useActiveAddress';
 import { LabelValueItem } from '_src/ui/app/components/LabelValueItem';
 import { LabelValuesContainer } from '_src/ui/app/components/LabelValuesContainer';
 import { ErrorBoundary } from '_src/ui/app/components/error-boundary';
 import PageTitle from '_src/ui/app/shared/PageTitle';
 import { Collapse } from '_src/ui/app/shared/collapse';
+import { NFTDisplayCard } from '_src/ui/app/components/nft-display';
 
 function KioskDetailsPage() {
 	const [searchParams] = useSearchParams();

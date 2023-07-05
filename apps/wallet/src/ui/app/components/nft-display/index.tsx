@@ -1,12 +1,11 @@
 // Copyright (c) Mysten Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-import { isKioskOwnerToken, useGetObject } from '@mysten/core';
+import { useGetObject } from '@mysten/core';
 import { formatAddress } from '@mysten/sui.js';
 import { cva, cx } from 'class-variance-authority';
 
 import { useResolveVideo } from '../../hooks/useResolveVideo';
-import { Kiosk } from './Kiosk';
 import { Heading } from '_app/shared/heading';
 import Loading from '_components/loading';
 import { NftImage, type NftImageProps } from '_components/nft-display/NftImage';
@@ -29,12 +28,13 @@ const nftDisplayCardStyles = cva('relative flex flex-nowrap items-center h-full'
 	},
 });
 
-export interface NFTsProps extends VariantProps<typeof nftDisplayCardStyles> {
+export interface NFTDisplayCardProps extends VariantProps<typeof nftDisplayCardStyles> {
 	objectId: string;
 	showLabel?: boolean;
 	size: NftImageProps['size'];
 	borderRadius?: NftImageProps['borderRadius'];
 	playable?: boolean;
+	className?: string;
 }
 
 export function NFTDisplayCard({
@@ -45,11 +45,9 @@ export function NFTDisplayCard({
 	animateHover,
 	borderRadius = 'md',
 	playable,
-}: NFTsProps) {
+	className,
+}: NFTDisplayCardProps) {
 	const { data: objectData } = useGetObject(objectId);
-
-	const isOwnerToken = isKioskOwnerToken(objectData);
-
 	const { data: nftMeta, isLoading } = useGetNFTMeta(objectId);
 	const nftName = nftMeta?.name || formatAddress(objectId);
 	const nftImageUrl = nftMeta?.imageUrl || '';
@@ -61,14 +59,12 @@ export function NFTDisplayCard({
 			<Loading loading={isLoading}>
 				{video && playable ? (
 					<video controls className="h-full w-full rounded-md overflow-hidden" src={video} />
-				) : isOwnerToken ? (
-					<Kiosk object={objectData} />
 				) : (
 					<NftImage
 						name={nftName}
 						src={nftImageUrl}
 						title={nftMeta?.description || ''}
-						animateHover={true}
+						animateHover={animateHover}
 						showLabel={!wideView}
 						borderRadius={borderRadius}
 						size={size}
@@ -96,7 +92,7 @@ export function NFTDisplayCard({
 							animateHover ? 'group-hover:text-black duration-200 ease-ease-in-out-cubic' : '',
 						)}
 					>
-						{isOwnerToken ? 'Kiosk' : nftName}
+						{nftName}
 					</div>
 				)}
 			</Loading>

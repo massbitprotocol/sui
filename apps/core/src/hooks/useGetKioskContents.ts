@@ -2,24 +2,16 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { JsonRpcProvider, SuiAddress, SuiObjectResponse } from '@mysten/sui.js';
-import { KIOSK_OWNER_CAP, KioskData, KioskItem, fetchKiosk, getOwnedKiosks } from '@mysten/kiosk';
+import { KioskData, KioskItem, fetchKiosk, getOwnedKiosks } from '@mysten/kiosk';
 import { useQuery } from '@tanstack/react-query';
 import { useRpcClient } from '../api/RpcClientContext';
+import { ORIGINBYTE_KIOSK_OWNER_TOKEN, getKioskIdFromDynamicFields } from '../utils/kiosk';
 
-const getKioskId = (obj: SuiObjectResponse) =>
-	obj.data?.content &&
-	'fields' in obj.data.content &&
-	(obj.data.content.fields.for ?? obj.data.content.fields.kiosk);
+export type KioskContents = Omit<KioskData, 'items'> & {
+	items: Partial<KioskItem & SuiObjectResponse>[];
+};
 
-// OriginByte module for mainnet (we only support mainnet)
-export const ORIGINBYTE_KIOSK_MODULE =
-	'0x95a441d389b07437d00dd07e0b6f05f513d7659b13fd7c5d3923c7d9d847199b::ob_kiosk' as const;
-export const ORIGINBYTE_KIOSK_OWNER_TOKEN = `${ORIGINBYTE_KIOSK_MODULE}::OwnerToken`;
-
-export function isKioskOwnerToken(object?: SuiObjectResponse) {
-	if (!object) return false;
-	return [KIOSK_OWNER_CAP, ORIGINBYTE_KIOSK_OWNER_TOKEN].includes(object.data?.type ?? '');
-}
+export type OriginByteKioskContents = { items: SuiObjectResponse[] };
 
 async function getOriginByteKioskContents(address: SuiAddress, rpc: JsonRpcProvider) {
 	const data = await rpc.getOwnedObjects({
@@ -32,9 +24,9 @@ async function getOriginByteKioskContents(address: SuiAddress, rpc: JsonRpcProvi
 		},
 	});
 
-	const ids = data.data.map((object) => getKioskId(object) ?? []);
+	const ids = data.data.map((object) => getKioskIdFromDynamicFields(object) ?? []);
 
-	const kiosks = new Map<string, { items: SuiObjectResponse[] }>();
+	const kiosks = new Map<string, OriginByteKioskContents>();
 
 	// fetch the user's kiosks
 	const ownedKiosks = await rpc.multiGetObjects({
@@ -70,10 +62,6 @@ async function getOriginByteKioskContents(address: SuiAddress, rpc: JsonRpcProvi
 	return kiosks;
 }
 
-type KioskContents = Omit<KioskData, 'items'> & {
-	items: Partial<KioskItem & SuiObjectResponse>[];
-};
-
 async function getSuiKioskContents(address: SuiAddress, rpc: JsonRpcProvider) {
 	const ownedKiosks = await getOwnedKiosks(rpc, address!);
 
@@ -106,16 +94,17 @@ export function useGetKioskContents(address?: SuiAddress | null, disableOriginBy
 		queryKey: ['get-kiosk-contents', address, disableOriginByteKiosk],
 		queryFn: async () => {
 			const suiKiosks = await getSuiKioskContents(address!, rpc);
-			const obKioskContents = await getOriginByteKioskContents(address!, rpc);
-			const list = [
-				...Array.from((suiKiosks ?? []).values()),
-				...Array.from(obKioskContents.values() ?? []),
-			].flatMap((d) => d.items);
+			const obKiosks = !disableOriginByteKiosk
+				? await getOriginByteKioskContents(address!, rpc)
+				: new Map();
+			const list = [...Array.from(suiKiosks.values()), ...Array.from(obKiosks.values())].flatMap(
+				(d) => d.items,
+			);
 			return {
 				list,
 				kiosks: {
 					sui: suiKiosks,
-					originByte: obKioskContents,
+					originByte: obKiosks,
 				},
 			};
 		},

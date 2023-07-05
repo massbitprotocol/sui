@@ -1,7 +1,7 @@
 // Copyright (c) Mysten Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-import { useOnScreen } from '@mysten/core';
+import { isKioskOwnerToken, useOnScreen } from '@mysten/core';
 import { useRef, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 
@@ -12,13 +12,14 @@ import Loading from '_components/loading';
 import LoadingSpinner from '_components/loading/LoadingIndicator';
 import { NFTDisplayCard } from '_components/nft-display';
 import { ampli } from '_src/shared/analytics/ampli';
+import { Kiosk } from '_src/ui/app/components/nft-display/Kiosk';
 import { useGetNFTs } from '_src/ui/app/hooks/useGetNFTs';
 import PageTitle from '_src/ui/app/shared/PageTitle';
 
 function NftsPage() {
 	const accountAddress = useActiveAddress();
 	const {
-		data: nfts,
+		data: ownedAssets,
 		hasNextPage,
 		isInitialLoading,
 		isFetchingNextPage,
@@ -35,7 +36,8 @@ function NftsPage() {
 		if (isIntersecting && hasNextPage && !isFetchingNextPage) {
 			fetchNextPage();
 		}
-	}, [nfts.ownedObjects.length, isIntersecting, fetchNextPage, hasNextPage, isFetchingNextPage]);
+	}, [ownedAssets.length, isIntersecting, fetchNextPage, hasNextPage, isFetchingNextPage]);
+
 	if (isInitialLoading) {
 		return (
 			<div className="mt-1 flex w-full justify-center">
@@ -57,57 +59,43 @@ function NftsPage() {
 					</Alert>
 				) : null}
 
-				{nfts?.ownedObjects.length ? (
+				{ownedAssets.length ? (
 					<div className="grid w-full grid-cols-2 gap-x-3.5 gap-y-4">
-						{nfts.kioskOwnerTokens?.map((object) => (
-							<Link
-								to={`/kiosk?${new URLSearchParams({
-									kioskId:
-										object && object.content && 'fields' in object.content
-											? object.content.fields.kiosk ||
-											  (object.content && 'fields' in object.content && object.content.fields.for)
-											: null,
-								}).toString()}`}
-								onClick={() => {}}
-								key={object.objectId}
-								className="no-underline"
-							>
-								<ErrorBoundary>
-									<NFTDisplayCard
-										objectId={object.objectId}
-										size="lg"
-										showLabel
-										animateHover
-										borderRadius="xl"
-									/>
-								</ErrorBoundary>
-							</Link>
-						))}
-						{nfts.ownedObjects.map(({ objectId, type }) => (
-							<Link
-								to={`/nft-details?${new URLSearchParams({
-									objectId,
-								}).toString()}`}
-								onClick={() => {
-									ampli.clickedCollectibleCard({
-										objectId,
-										collectibleType: type!,
-									});
-								}}
-								key={objectId}
-								className="no-underline"
-							>
-								<ErrorBoundary>
-									<NFTDisplayCard
-										objectId={objectId}
-										size="lg"
-										showLabel
-										animateHover
-										borderRadius="xl"
-									/>
-								</ErrorBoundary>
-							</Link>
-						))}
+						{ownedAssets.map((object) =>
+							isKioskOwnerToken(object) ? (
+								<Link
+									to={`/kiosk?${new URLSearchParams({ kioskId: object.objectId })}`}
+									key={object.objectId}
+									className="no-underline"
+								>
+									<Kiosk object={object} objectId={object.objectId} size="lg" />
+								</Link>
+							) : (
+								<Link
+									to={`/nft-details?${new URLSearchParams({
+										objectId: object.objectId,
+									}).toString()}`}
+									onClick={() => {
+										ampli.clickedCollectibleCard({
+											objectId: object.objectId,
+											collectibleType: object.type!,
+										});
+									}}
+									key={object.objectId}
+									className="no-underline"
+								>
+									<ErrorBoundary>
+										<NFTDisplayCard
+											objectId={object.objectId}
+											size="lg"
+											showLabel
+											animateHover
+											borderRadius="xl"
+										/>
+									</ErrorBoundary>
+								</Link>
+							),
+						)}
 						<div ref={observerElem}>
 							{isSpinnerVisible ? (
 								<div className="mt-1 flex w-full justify-center">

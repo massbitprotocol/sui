@@ -47,6 +47,7 @@ export interface NftImageProps extends VariantProps<typeof nftImageStyles> {
 	name: string | null;
 	title?: string;
 	showLabel?: boolean;
+	playable?: boolean;
 }
 
 export function NftImage({
@@ -58,6 +59,7 @@ export function NftImage({
 	borderRadius,
 	size,
 	video,
+	playable,
 }: NftImageProps) {
 	const [error, setError] = useState(false);
 	const imgCls = cl(
@@ -95,11 +97,15 @@ export function NftImage({
 				/>
 			)}
 
-			{video && (
-				<div className="pointer-events-none absolute bottom-2 right-2 z-10 flex items-center justify-center rounded-full opacity-80 text-black">
-					<MediaPlay16 className="h-8 w-8" />
-				</div>
-			)}
+			{video ? (
+				playable ? (
+					<video controls className="h-full w-full rounded-md overflow-hidden" src={video} />
+				) : (
+					<div className="pointer-events-none absolute bottom-2 right-2 z-10 flex items-center justify-center rounded-full opacity-80 text-black">
+						<MediaPlay16 className="h-8 w-8" />
+					</div>
+				)
+			) : null}
 		</div>
 	);
 }
