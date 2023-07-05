@@ -1050,6 +1050,10 @@ impl Interpreter {
             .collect();
         ExecutionState::new(stack_trace)
     }
+
+    pub fn get_values_len(&self) -> usize {
+        self.operand_stack.get_values_len()
+    }
 }
 
 // TODO Determine stack size limits based on gas limit
@@ -1157,7 +1161,7 @@ impl Stack {
         Ok(())
     }
 
-    fn get_stack_len(&self) -> usize {
+    fn get_values_len(&self) -> usize {
         self.value.len()
     }
 }
