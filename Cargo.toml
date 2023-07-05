@@ -358,7 +358,7 @@ tokio = "1.28.1"
 tokio-retry = "0.3"
 tokio-rustls = "0.23"
 tokio-stream = { version = "0.1.14", features = ["sync", "net"] }
-tokio-util = "0.7.4"
+tokio-util = "0.7.8"
 toml = { version = "0.7.4", features = ["preserve_order"] }
 toml_edit = { version = "0.19.10" }
 tonic = { version = "0.8.2", features = ["transport", "tls"] }
@@ -407,10 +407,10 @@ fastcrypto = { git = "https://github.com/MystenLabs/fastcrypto", rev = "c961a015
 fastcrypto-zkp = { git = "https://github.com/MystenLabs/fastcrypto", rev = "c961a01596a87e76f590c7e43aca9d57106dbbb1", package = "fastcrypto-zkp" }
 
 # anemo dependencies
-anemo = { git = "https://github.com/mystenlabs/anemo.git", rev = "0f0ae8d8f222820a20b586088ea7a2941478a159" }
-anemo-build = { git = "https://github.com/mystenlabs/anemo.git", rev = "0f0ae8d8f222820a20b586088ea7a2941478a159" }
-anemo-cli = { git = "https://github.com/mystenlabs/anemo.git", rev = "0f0ae8d8f222820a20b586088ea7a2941478a159"}
-anemo-tower = { git = "https://github.com/mystenlabs/anemo.git", rev = "0f0ae8d8f222820a20b586088ea7a2941478a159"}
+anemo = { path = "../anemo/crates/anemo" }
+anemo-build = { path = "../anemo/crates/anemo-build" }
+anemo-cli = { path = "../anemo/crates/anemo-cli" }
+anemo-tower = { path = "../anemo/crates/anemo-tower" }
 
 ### Workspace Members ###
 anemo-benchmark = { path = "crates/anemo-benchmark" }
