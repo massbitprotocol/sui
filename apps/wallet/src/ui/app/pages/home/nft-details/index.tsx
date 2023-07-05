@@ -1,8 +1,8 @@
 // Copyright (c) Mysten Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-import { useFeatureValue } from '@growthbook/growthbook-react';
-import { useGetKioskContents } from '@mysten/core';
+// import { useFeatureValue } from '@growthbook/growthbook-react';
+// import { useGetKioskContents } from '@mysten/core';
 import { ArrowUpRight12, ArrowRight16 } from '@mysten/icons';
 import { hasPublicTransfer, formatAddress } from '@mysten/sui.js';
 import cl from 'classnames';
@@ -28,13 +28,13 @@ function NFTDetailsPage() {
 	const { data: objectData, isLoading } = useOwnedNFT(nftId || '', accountAddress);
 	const isTransferable = !!objectData && hasPublicTransfer(objectData);
 	const { nftFields, fileExtensionType, filePath } = useNFTBasicData(objectData);
-	const address = useActiveAddress();
-	const { data } = useGetKioskContents(address);
-	const isContainedInSuiKiosk = data?.list.some((k) => k.data?.objectId === nftId);
-	const marketplaceLinks = useFeatureValue('kiosk-marketplace-links', [
-		{ href: 'https://docs.sui.io/build/sui-kiosk', text: 'Learn more about Kiosks' },
-		{ href: 'https://sui.directory/?_project_type=marketplace', text: 'Explore Sui Marketplaces' },
-	]);
+	// const address = useActiveAddress();
+	// const { data } = useGetKioskContents(address);
+	// const isContainedInSuiKiosk = data?.list.some((k) => k.data?.objectId === nftId);
+	// const marketplaceLinks = useFeatureValue('kiosk-marketplace-links', [
+	// 	{ href: 'https://docs.sui.io/build/sui-kiosk', text: 'Learn more about Kiosks' },
+	// 	{ href: 'https://sui.directory/?_project_type=marketplace', text: 'Explore Sui Marketplaces' },
+	// ]);
 
 	// Extract either the attributes, or use the top-level NFT fields:
 	const metaFields =

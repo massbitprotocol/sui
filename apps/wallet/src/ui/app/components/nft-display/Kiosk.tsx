@@ -7,13 +7,13 @@ import {
 	hasDisplayData,
 	useGetKioskContents,
 } from '@mysten/core';
-import { getObjectDisplay, SuiObjectResponse, type SuiObjectData } from '@mysten/sui.js';
-
+import { getObjectDisplay, type SuiObjectResponse } from '@mysten/sui.js';
 import cl from 'classnames';
-import { NFTDisplayCard, type NFTDisplayCardProps } from '.';
+
+import { type NFTDisplayCardProps } from '.';
 import { useActiveAddress } from '../../hooks';
 import { Text } from '../../shared/text';
-import { NftImage, nftImageStyles } from './NftImage';
+import { NftImage } from './NftImage';
 
 type KioskProps = {
 	object: SuiObjectResponse;
@@ -31,7 +31,7 @@ export function Kiosk({ object, ...nftDisplayCardProps }: KioskProps) {
 	const kioskId = getKioskIdFromDynamicFields(object);
 	const suiKiosk = kioskData?.kiosks.sui.get(kioskId) as KioskContents;
 	const obKiosk = kioskData?.kiosks.originByte.get(kioskId) as OriginByteKioskContents;
-	const items = (suiKiosk?.items ?? obKiosk?.items).sort((item) => (hasDisplayData(item) ? -1 : 1));
+	const items = (suiKiosk?.items ?? obKiosk.items).sort((item) => (hasDisplayData(item) ? -1 : 1));
 
 	return (
 		<div className="relative hover:bg-transparent group transition-all flex justify-between h-36 w-36 rounded-xl">
@@ -44,12 +44,12 @@ export function Kiosk({ object, ...nftDisplayCardProps }: KioskProps) {
 							<div
 								className={cl(
 									'absolute transition-all ease-ease-out-cubic duration-250 rounded-xl',
-									styles[idx],
+									items.length > 1 ? styles[idx] : 'group-hover:scale-105',
 								)}
 							>
 								<NftImage
 									src={display.image_url}
-									title={display.description}
+									// title={display.description}
 									borderRadius={nftDisplayCardProps.borderRadius}
 									size={nftDisplayCardProps.size}
 									name="Kiosk"

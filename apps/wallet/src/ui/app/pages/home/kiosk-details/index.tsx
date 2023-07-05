@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { hasDisplayData, useGetKioskContents } from '@mysten/core';
-import { formatAddress } from '@mysten/sui.js';
+import { type SuiObjectResponse, formatAddress } from '@mysten/sui.js';
 import { useSearchParams, Link } from 'react-router-dom';
 
 import { useActiveAddress } from '_app/hooks/useActiveAddress';
@@ -23,10 +23,8 @@ function KioskDetailsPage() {
 		return kiosk.get(kioskId!);
 	});
 
-	console.log(kiosk);
-
 	const [type, contents] = kiosk || [];
-	const items = contents?.get(kioskId!)?.items ?? [];
+	const items = (contents?.get(kioskId!)?.items as SuiObjectResponse[]) ?? [];
 
 	return (
 		<div className="flex flex-1 flex-col flex-nowrap gap-5 mb-10">
