@@ -99,9 +99,6 @@ impl<'a, 'b> TypeView for TypeWithLoader<'a, 'b> {
 }
 
 pub trait InterpreterInterface {
-    fn push_ty(&mut self, ty: Type) -> PartialVMResult<()>;
-    fn pop_ty(&mut self) -> PartialVMResult<Type>;
-    fn popn_tys(&mut self, n: u16) -> PartialVMResult<Vec<Type>>;
     fn check_balance(&self) -> PartialVMResult<()>;
     fn set_location(&self, err: PartialVMError) -> VMError;
     fn maybe_core_dump(&self, err: VMError, current_frame: &Frame) -> VMError;
@@ -109,18 +106,6 @@ pub trait InterpreterInterface {
 }
 
 impl InterpreterInterface for Interpreter {
-    fn push_ty(&mut self, ty: Type) -> PartialVMResult<()> {
-        self.operand_stack.push_ty(ty)
-    }
-
-    fn pop_ty(&mut self) -> PartialVMResult<Type> {
-        self.operand_stack.pop_ty()
-    }
-
-    fn popn_tys(&mut self, n: u16) -> PartialVMResult<Vec<Type>> {
-        self.operand_stack.popn_tys(n)
-    }
-
     fn check_balance(&self) -> PartialVMResult<()> {
         self.operand_stack.check_balance()
     }
@@ -146,6 +131,7 @@ impl Interpreter {
 
     pub fn pre_hook_entrypoint(
         interpreter: &mut Interpreter,
+        plugins: &mut Vec<ParanoidTypeChecker>,
         gas_meter: &mut impl GasMeter,
         function: &Arc<Function>,
         ty_args: &[Type],
@@ -155,13 +141,14 @@ impl Interpreter {
         profile_open_frame!(gas_meter, function.pretty_string());
 
         if interpreter.paranoid_type_checks {
-            ParanoidTypeChecker::pre_hook_entrypoint(
-                interpreter,
-                function,
-                ty_args,
-                data_store.link_context(),
-                loader,
-            )?;
+            for checker in plugins.iter_mut() {
+                checker.pre_hook_entrypoint(
+                    function,
+                    ty_args,
+                    data_store.link_context(),
+                    loader,
+                )?;
+            }
         }
 
         Ok(())
@@ -169,6 +156,7 @@ impl Interpreter {
 
     pub fn pre_hook_fn(
         interpreter: &mut Interpreter,
+        plugins: &mut Vec<ParanoidTypeChecker>,
         current_frame: &mut Frame,
         data_store: &mut impl DataStore,
         loader: &Loader,
@@ -181,14 +169,16 @@ impl Interpreter {
         let mut frame_interface = current_frame.frame_interface();
 
         if interpreter.paranoid_type_checks {
-            ParanoidTypeChecker::pre_hook_fn(
-                interpreter,
-                &mut frame_interface,
-                function,
-                ty_args,
-                data_store.link_context(),
-                loader,
-            )?;
+            for checker in plugins.iter_mut() {
+                checker.pre_hook_fn(
+                    interpreter,
+                    &mut frame_interface,
+                    function,
+                    ty_args,
+                    data_store.link_context(),
+                    loader,
+                )?;
+            }
         }
 
         Ok(())
@@ -199,49 +189,55 @@ impl Interpreter {
     }
 
     pub fn pre_hook_instr(
+        interpreter: &mut Interpreter,
+        plugins: &mut Vec<ParanoidTypeChecker>,
         gas_meter: &mut impl GasMeter,
         function: &Arc<Function>,
         instruction: &Bytecode,
         locals: &Locals,
         ty_args: &[Type],
         resolver: &Resolver,
-        interpreter: &mut Interpreter,
     ) -> PartialVMResult<()> {
         if interpreter.paranoid_type_checks {
-            ParanoidTypeChecker::pre_hook_instr(
-                interpreter,
-                gas_meter,
-                function,
-                instruction,
-                locals,
-                ty_args,
-                resolver,
-            )?;
+            for checker in plugins.iter_mut() {
+                checker.pre_hook_instr(
+                    interpreter,
+                    gas_meter,
+                    function,
+                    instruction,
+                    locals,
+                    ty_args,
+                    resolver,
+                )?;
+            }
         }
         profile_open_instr!(gas_meter, format!("{:?}", instruction));
         Ok(())
     }
 
     pub fn post_hook_instr(
+        interpreter: &mut Interpreter,
+        plugins: &mut Vec<ParanoidTypeChecker>,
         gas_meter: &mut impl GasMeter,
         function: &Arc<Function>,
         instruction: &Bytecode,
         ty_args: &[Type],
         resolver: &Resolver,
-        interpreter: &mut Interpreter,
         r: &InstrRet,
     ) -> PartialVMResult<()> {
         profile_close_instr!(gas_meter, format!("{:?}", instruction));
         if interpreter.paranoid_type_checks {
-            ParanoidTypeChecker::post_hook_instr(
-                interpreter,
-                gas_meter,
-                function,
-                instruction,
-                ty_args,
-                resolver,
-                r,
-            )?;
+            for checker in plugins.iter_mut() {
+                checker.post_hook_instr(
+                    interpreter,
+                    gas_meter,
+                    function,
+                    instruction,
+                    ty_args,
+                    resolver,
+                    r,
+                )?;
+            }
         }
         Ok(())
     }
@@ -264,8 +260,12 @@ impl Interpreter {
             runtime_limits_config: loader.vm_config().runtime_limits_config.clone(),
         };
 
+        // TODO(wlmyng): pre- and post- plugins
+        let mut plugins: Vec<ParanoidTypeChecker> = vec![ParanoidTypeChecker::new()];
+
         Self::pre_hook_entrypoint(
             &mut interpreter,
+            &mut plugins,
             gas_meter,
             &function,
             &ty_args,
@@ -308,7 +308,14 @@ impl Interpreter {
             Ok(return_values.into_iter().collect())
         } else {
             interpreter.execute_main(
-                loader, data_store, gas_meter, extensions, function, ty_args, args,
+                loader,
+                data_store,
+                gas_meter,
+                extensions,
+                function,
+                ty_args,
+                args,
+                &mut plugins,
             )
         }
     }
@@ -328,6 +335,7 @@ impl Interpreter {
         function: Arc<Function>,
         ty_args: Vec<Type>,
         args: Vec<Value>,
+        plugins: &mut Vec<ParanoidTypeChecker>,
     ) -> VMResult<Vec<Value>> {
         let mut locals = Locals::new(function.local_count());
         for (i, value) in args.into_iter().enumerate() {
@@ -350,7 +358,7 @@ impl Interpreter {
             let resolver = current_frame.resolver(link_context, loader);
             let exit_code =
                 current_frame //self
-                    .execute_code(&resolver, &mut self, data_store, gas_meter)
+                    .execute_code(&resolver, &mut self, plugins, data_store, gas_meter)
                     .map_err(|err| self.maybe_core_dump(err, &current_frame))?;
             match exit_code {
                 ExitCode::Return => {
@@ -379,6 +387,7 @@ impl Interpreter {
                     let func = resolver.function_from_handle(fh_idx);
                     Self::pre_hook_fn(
                         &mut self,
+                        plugins,
                         &mut current_frame,
                         data_store,
                         loader,
@@ -440,6 +449,7 @@ impl Interpreter {
                     let func = resolver.function_from_instantiation(idx);
                     Self::pre_hook_fn(
                         &mut self,
+                        plugins,
                         &mut current_frame,
                         data_store,
                         loader,
@@ -1232,10 +1242,11 @@ impl Frame {
         &mut self,
         resolver: &Resolver,
         interpreter: &mut Interpreter,
+        plugins: &mut Vec<ParanoidTypeChecker>,
         data_store: &mut impl DataStore,
         gas_meter: &mut impl GasMeter,
     ) -> VMResult<ExitCode> {
-        self.execute_code_impl(resolver, interpreter, data_store, gas_meter)
+        self.execute_code_impl(resolver, interpreter, plugins, data_store, gas_meter)
             .map_err(|e| {
                 let e = if resolver.loader().vm_config().error_execution_state {
                     e.with_exec_state(interpreter.get_internal_state())
@@ -1801,6 +1812,7 @@ impl Frame {
         &mut self,
         resolver: &Resolver,
         interpreter: &mut Interpreter,
+        plugins: &mut Vec<ParanoidTypeChecker>,
         data_store: &mut impl DataStore,
         gas_meter: &mut impl GasMeter,
     ) -> PartialVMResult<ExitCode> {
@@ -1833,13 +1845,14 @@ impl Frame {
                 // proper gas has been charged for each instruction.
 
                 Interpreter::pre_hook_instr(
+                    interpreter,
+                    plugins,
                     gas_meter,
                     &self.function,
                     instruction,
                     &self.locals,
                     &self.ty_args,
                     resolver,
-                    interpreter,
                 )?;
 
                 let r = Self::execute_instruction(
@@ -1855,12 +1868,13 @@ impl Frame {
                 )?;
 
                 Interpreter::post_hook_instr(
+                    interpreter,
+                    plugins,
                     gas_meter,
                     &self.function,
                     instruction,
                     &self.ty_args,
                     resolver,
-                    interpreter,
                     &r,
                 )?;
 
