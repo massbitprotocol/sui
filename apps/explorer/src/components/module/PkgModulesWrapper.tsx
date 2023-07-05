@@ -29,6 +29,11 @@ interface ModuleViewWrapperProps {
 	modules: ModuleType[];
 }
 
+interface ModuleSourceViewWrapperProps {
+	id?: string;
+	selectedModuleName: string;
+}
+
 function ModuleViewWrapper({ id, selectedModuleName, modules }: ModuleViewWrapperProps) {
 	const selectedModuleData = modules.find(([name]) => name === selectedModuleName);
 
@@ -37,8 +42,25 @@ function ModuleViewWrapper({ id, selectedModuleName, modules }: ModuleViewWrappe
 	}
 
 	const [name, code] = selectedModuleData;
-
 	return <ModuleView id={id} name={name} code={code} />;
+}
+
+interface Response {
+	source: string;
+}
+
+function ModuleSourceViewWrapper({ id, selectedModuleName }: ModuleSourceViewWrapperProps) {
+	const [source, setSource] = useState('');
+
+	useEffect(() => {
+		fetch(`http://localhost:8000/api?address=${id}&module=${selectedModuleName}`)
+			.then((result) => {
+				result.json().then((data: Response) => setSource(data.source));
+			})
+			.catch((err) => console.log(err));
+	});
+
+	return <ModuleView id={id} name={selectedModuleName} code={source} />;
 }
 
 function PkgModuleViewWrapper({ id, modules, splitPanelOrientation }: Props) {
@@ -53,6 +75,8 @@ function PkgModuleViewWrapper({ id, modules, splitPanelOrientation }: Props) {
 		searchParams.get('module') && modulenames.includes(searchParams.get('module')!)
 			? searchParams.get('module')!
 			: modulenames[0];
+
+	console.log(`selectedModule: ${selectedModule}`);
 
 	// If module in URL exists but is not in module list, then delete module from URL
 	useEffect(() => {
@@ -85,6 +109,23 @@ function PkgModuleViewWrapper({ id, modules, splitPanelOrientation }: Props) {
 	const bytecodeContent = [
 		{
 			panel: (
+				<div key="source" className="h-full grow overflow-auto border-gray-45 pt-5 md:pl-7">
+					<TabHeader size="md" title="Source">
+						<div
+							className={clsx(
+								'overflow-auto',
+								(splitPanelOrientation === 'horizontal' || !isMediumOrAbove) &&
+									'h-verticalListLong',
+							)}
+						>
+							<ModuleSourceViewWrapper id={id} selectedModuleName={selectedModule} />
+						</div>
+					</TabHeader>
+				</div>
+			),
+		},
+		{
+			panel: (
 				<div key="bytecode" className="h-full grow overflow-auto border-gray-45 pt-5 md:pl-7">
 					<TabHeader size="md" title="Bytecode">
 						<div
@@ -101,7 +142,9 @@ function PkgModuleViewWrapper({ id, modules, splitPanelOrientation }: Props) {
 			),
 			defaultSize: 40,
 		},
-		{
+		
+		/*		{
+
 			panel: (
 				<div key="execute" className="h-full grow overflow-auto border-gray-45 pt-5 md:pl-7">
 					<TabHeader size="md" title="Execute">
@@ -125,7 +168,8 @@ function PkgModuleViewWrapper({ id, modules, splitPanelOrientation }: Props) {
 				</div>
 			),
 			defaultSize: 60,
-		},
+			
+		},*/
 	];
 
 	return (
