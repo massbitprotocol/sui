@@ -1063,16 +1063,12 @@ const CALL_STACK_SIZE_LIMIT: usize = 1024;
 /// The operand stack.
 struct Stack {
     value: Vec<Value>,
-    types: Vec<Type>,
 }
 
 impl Stack {
     /// Create a new empty operand stack.
     fn new() -> Self {
-        Stack {
-            value: vec![],
-            types: vec![],
-        }
+        Stack { value: vec![] }
     }
 
     /// Push a `Value` on the stack if the max stack size has not been reached. Abort execution
@@ -1119,46 +1115,6 @@ impl Stack {
                 .with_message("Failed to get last n arguments on the argument stack".to_string()));
         }
         Ok(self.value[(self.value.len() - n)..].iter())
-    }
-
-    /// Push a `Value` on the stack if the max stack size has not been reached. Abort execution
-    /// otherwise.
-    fn push_ty(&mut self, ty: Type) -> PartialVMResult<()> {
-        if self.types.len() < OPERAND_STACK_SIZE_LIMIT {
-            self.types.push(ty);
-            Ok(())
-        } else {
-            Err(PartialVMError::new(StatusCode::EXECUTION_STACK_OVERFLOW))
-        }
-    }
-
-    /// Pop a `Value` off the stack or abort execution if the stack is empty.
-    fn pop_ty(&mut self) -> PartialVMResult<Type> {
-        self.types
-            .pop()
-            .ok_or_else(|| PartialVMError::new(StatusCode::EMPTY_VALUE_STACK))
-    }
-
-    /// Pop n values off the stack.
-    fn popn_tys(&mut self, n: u16) -> PartialVMResult<Vec<Type>> {
-        let remaining_stack_size = self
-            .types
-            .len()
-            .checked_sub(n as usize)
-            .ok_or_else(|| PartialVMError::new(StatusCode::EMPTY_VALUE_STACK))?;
-        let args = self.types.split_off(remaining_stack_size);
-        Ok(args)
-    }
-
-    fn check_balance(&self) -> PartialVMResult<()> {
-        if self.types.len() != self.value.len() {
-            return Err(
-                PartialVMError::new(StatusCode::UNKNOWN_INVARIANT_VIOLATION_ERROR).with_message(
-                    "Paranoid Mode: Type and value stack need to be balanced".to_string(),
-                ),
-            );
-        }
-        Ok(())
     }
 
     fn get_values_len(&self) -> usize {
