@@ -98,37 +98,43 @@ impl<'a, 'b> TypeView for TypeWithLoader<'a, 'b> {
     }
 }
 
-pub struct InterpreterInterface<'a> {
-    interpreter: &'a mut Interpreter,
+pub trait InterpreterInterface {
+    fn push_ty(&mut self, ty: Type) -> PartialVMResult<()>;
+    fn pop_ty(&mut self) -> PartialVMResult<Type>;
+    fn popn_tys(&mut self, n: u16) -> PartialVMResult<Vec<Type>>;
+    fn check_balance(&self) -> PartialVMResult<()>;
+    fn set_location(&self, err: PartialVMError) -> VMError;
+    fn maybe_core_dump(&self, err: VMError, current_frame: &Frame) -> VMError;
+    fn get_internal_state(&self) -> ExecutionState;
 }
 
-impl<'a> InterpreterInterface<'a> {
-    pub fn push_ty(&mut self, ty: Type) -> PartialVMResult<()> {
-        self.interpreter.operand_stack.push_ty(ty)
+impl InterpreterInterface for Interpreter {
+    fn push_ty(&mut self, ty: Type) -> PartialVMResult<()> {
+        self.operand_stack.push_ty(ty)
     }
 
-    pub fn pop_ty(&mut self) -> PartialVMResult<Type> {
-        self.interpreter.operand_stack.pop_ty()
+    fn pop_ty(&mut self) -> PartialVMResult<Type> {
+        self.operand_stack.pop_ty()
     }
 
-    pub fn popn_tys(&mut self, n: u16) -> PartialVMResult<Vec<Type>> {
-        self.interpreter.operand_stack.popn_tys(n)
+    fn popn_tys(&mut self, n: u16) -> PartialVMResult<Vec<Type>> {
+        self.operand_stack.popn_tys(n)
     }
 
-    pub fn check_balance(&self) -> PartialVMResult<()> {
-        self.interpreter.operand_stack.check_balance()
+    fn check_balance(&self) -> PartialVMResult<()> {
+        self.operand_stack.check_balance()
     }
 
-    pub fn set_location(&self, err: PartialVMError) -> VMError {
-        self.interpreter.set_location(err)
+    fn set_location(&self, err: PartialVMError) -> VMError {
+        self.set_location(err)
     }
 
-    pub fn maybe_core_dump(&self, err: VMError, current_frame: &Frame) -> VMError {
-        self.interpreter.maybe_core_dump(err, current_frame)
+    fn maybe_core_dump(&self, err: VMError, current_frame: &Frame) -> VMError {
+        self.maybe_core_dump(err, current_frame)
     }
 
-    pub fn get_internal_state(&self) -> ExecutionState {
-        self.interpreter.get_internal_state()
+    fn get_internal_state(&self) -> ExecutionState {
+        self.get_internal_state()
     }
 }
 
@@ -136,10 +142,6 @@ impl Interpreter {
     /// Limits imposed at runtime
     pub fn runtime_limits_config(&self) -> &VMRuntimeLimitsConfig {
         &self.runtime_limits_config
-    }
-
-    pub fn interpreter_interface(&mut self) -> InterpreterInterface {
-        InterpreterInterface { interpreter: self }
     }
 
     pub fn pre_hook_entrypoint(
@@ -154,7 +156,7 @@ impl Interpreter {
 
         if interpreter.paranoid_type_checks {
             ParanoidTypeChecker::pre_hook_entrypoint(
-                &mut interpreter.interpreter_interface(),
+                interpreter,
                 function,
                 ty_args,
                 data_store.link_context(),
@@ -180,7 +182,7 @@ impl Interpreter {
 
         if interpreter.paranoid_type_checks {
             ParanoidTypeChecker::pre_hook_fn(
-                &mut interpreter.interpreter_interface(),
+                interpreter,
                 &mut frame_interface,
                 function,
                 ty_args,
@@ -207,7 +209,7 @@ impl Interpreter {
     ) -> PartialVMResult<()> {
         if interpreter.paranoid_type_checks {
             ParanoidTypeChecker::pre_hook_instr(
-                &mut interpreter.interpreter_interface(),
+                interpreter,
                 gas_meter,
                 function,
                 instruction,
@@ -232,7 +234,7 @@ impl Interpreter {
         profile_close_instr!(gas_meter, format!("{:?}", instruction));
         if interpreter.paranoid_type_checks {
             ParanoidTypeChecker::post_hook_instr(
-                &mut interpreter.interpreter_interface(),
+                interpreter,
                 gas_meter,
                 function,
                 instruction,

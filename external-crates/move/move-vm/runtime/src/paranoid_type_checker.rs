@@ -20,7 +20,7 @@ pub struct ParanoidTypeChecker {}
 
 impl ParanoidTypeChecker {
     pub(crate) fn pre_hook_entrypoint(
-        interpreter: &mut InterpreterInterface,
+        interpreter: &mut impl InterpreterInterface,
         function: &Arc<Function>,
         ty_args: &[Type],
         link_context: AccountAddress,
@@ -51,7 +51,7 @@ impl ParanoidTypeChecker {
     }
 
     pub(crate) fn pre_hook_fn(
-        interpreter: &mut InterpreterInterface,
+        interpreter: &mut impl InterpreterInterface,
         current_frame: &mut FrameInterface,
         function: &Arc<Function>,
         ty_args: &[Type],
@@ -102,7 +102,7 @@ impl ParanoidTypeChecker {
     pub(crate) fn post_hook_fn(gas_meter: &mut impl GasMeter, function: &Arc<Function>) -> () {}
 
     pub(crate) fn pre_hook_instr(
-        interpreter: &mut InterpreterInterface,
+        interpreter: &mut impl InterpreterInterface,
         gas_meter: &mut impl GasMeter,
         function: &Arc<Function>,
         instruction: &Bytecode,
@@ -124,7 +124,7 @@ impl ParanoidTypeChecker {
     }
 
     pub(crate) fn post_hook_instr(
-        interpreter: &mut InterpreterInterface,
+        interpreter: &mut impl InterpreterInterface,
         gas_meter: &mut impl GasMeter,
         function: &Arc<Function>,
         instruction: &Bytecode,
@@ -146,7 +146,7 @@ impl ParanoidTypeChecker {
     }
 
     fn push_parameter_types(
-        interpreter: &mut InterpreterInterface,
+        interpreter: &mut impl InterpreterInterface,
         function: &Function,
         ty_args: &[Type],
         link_context: AccountAddress,
@@ -170,7 +170,7 @@ impl ParanoidTypeChecker {
     }
 
     fn check_friend_or_private_call(
-        interpreter: &mut InterpreterInterface,
+        interpreter: &mut impl InterpreterInterface,
         caller: &Arc<Function>,
         callee: &Arc<Function>,
     ) -> VMResult<()> {
@@ -201,7 +201,7 @@ impl ParanoidTypeChecker {
     }
 
     fn non_native_function(
-        interpreter: &mut InterpreterInterface,
+        interpreter: &mut impl InterpreterInterface,
         function: &Function,
         ty_args: &[Type],
         loader: &Loader,
@@ -220,7 +220,7 @@ impl ParanoidTypeChecker {
     }
 
     fn check_local_types(
-        interpreter: &mut InterpreterInterface,
+        interpreter: &mut impl InterpreterInterface,
         function: &Function,
         ty_args: &[Type],
         loader: &Loader,
@@ -261,7 +261,7 @@ impl ParanoidTypeChecker {
     }
 
     fn native_function(
-        interpreter: &mut InterpreterInterface,
+        interpreter: &mut impl InterpreterInterface,
         function: &Function,
         ty_args: &[Type],
         resolver: &Resolver,
@@ -272,7 +272,7 @@ impl ParanoidTypeChecker {
     }
 
     fn check_parameter_types(
-        interpreter: &mut InterpreterInterface,
+        interpreter: &mut impl InterpreterInterface,
         function: &Function,
         ty_args: &[Type],
         resolver: &Resolver,
@@ -288,7 +288,7 @@ impl ParanoidTypeChecker {
     }
 
     fn push_return_types(
-        interpreter: &mut InterpreterInterface,
+        interpreter: &mut impl InterpreterInterface,
         function: &Function,
         ty_args: &[Type],
     ) -> PartialVMResult<()> {
@@ -299,7 +299,7 @@ impl ParanoidTypeChecker {
     }
 
     fn pre_instr(
-        interpreter: &mut InterpreterInterface,
+        interpreter: &mut impl InterpreterInterface,
         local_tys: &[Type],
         locals: &Locals,
         ty_args: &[Type],
@@ -319,7 +319,7 @@ impl ParanoidTypeChecker {
     }
 
     fn post_instr(
-        interpreter: &mut InterpreterInterface,
+        interpreter: &mut impl InterpreterInterface,
         local_tys: &[Type],
         ty_args: &[Type],
         resolver: &Resolver,
@@ -345,7 +345,7 @@ impl ParanoidTypeChecker {
     /// Note that most of the checks should happen after instruction execution, because gas charging will happen during
     /// instruction execution and we want to avoid running code without charging proper gas as much as possible.
     fn pre_execution_type_stack_transition(
-        interpreter: &mut InterpreterInterface,
+        interpreter: &mut impl InterpreterInterface,
         local_tys: &[Type],
         locals: &Locals,
         _ty_args: &[Type],
@@ -456,7 +456,7 @@ impl ParanoidTypeChecker {
     ///
     /// This function and `pre_execution_type_stack_transition` should constitute the full type stack transition for the paranoid mode.
     fn post_execution_type_stack_transition(
-        interpreter: &mut InterpreterInterface,
+        interpreter: &mut impl InterpreterInterface,
         local_tys: &[Type],
         ty_args: &[Type],
         resolver: &Resolver,
