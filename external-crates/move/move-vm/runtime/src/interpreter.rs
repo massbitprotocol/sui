@@ -99,15 +99,15 @@ impl<'a, 'b> TypeView for TypeWithLoader<'a, 'b> {
 }
 
 pub trait InterpreterInterface {
-    fn check_balance(&self) -> PartialVMResult<()>;
+    fn get_values_len(&self) -> usize;
     fn set_location(&self, err: PartialVMError) -> VMError;
     fn maybe_core_dump(&self, err: VMError, current_frame: &Frame) -> VMError;
     fn get_internal_state(&self) -> ExecutionState;
 }
 
 impl InterpreterInterface for Interpreter {
-    fn check_balance(&self) -> PartialVMResult<()> {
-        self.operand_stack.check_balance()
+    fn get_values_len(&self) -> usize {
+        self.get_values_len()
     }
 
     fn set_location(&self, err: PartialVMError) -> VMError {
@@ -1155,6 +1155,10 @@ impl Stack {
             );
         }
         Ok(())
+    }
+
+    fn get_stack_len(&self) -> usize {
+        self.value.len()
     }
 }
 

@@ -57,9 +57,9 @@ impl TypeStack {
         Ok(args)
     }
 
-    fn check_balance(&self) -> PartialVMResult<()> {
+    fn check_balance(&self, interpreter: &impl InterpreterInterface) -> PartialVMResult<()> {
         // TODO(wlmyng): pass in operand_stack immutable
-        if self.types.len() != self.types.len() {
+        if self.types.len() != interpreter.get_values_len() {
             return Err(
                 PartialVMError::new(StatusCode::UNKNOWN_INVARIANT_VIOLATION_ERROR).with_message(
                     "Paranoid Mode: Type and value stack need to be balanced".to_string(),
@@ -341,7 +341,7 @@ impl ParanoidTypeChecker {
         resolver: &Resolver,
         instruction: &Bytecode,
     ) -> PartialVMResult<()> {
-        interpreter.check_balance()?;
+        self.type_stack.check_balance(interpreter)?;
         self.pre_execution_type_stack_transition(
             local_tys,
             locals,
@@ -364,7 +364,7 @@ impl ParanoidTypeChecker {
         if let InstrRet::Ok = r {
             self.post_execution_type_stack_transition(local_tys, ty_args, resolver, instruction)?;
 
-            interpreter.check_balance()?;
+            self.type_stack.check_balance(interpreter)?;
         }
         Ok(())
     }
