@@ -16,4 +16,6 @@ export * from './transactions.js';
 export * from './subscriptions.js';
 export * from './name-service.js';
 export * from './dynamic_fields.js';
+export * from './checkpoints.js';
+export * from './metrics.js';
 export { GasCostSummary, CheckpointDigest, Checkpoint } from './checkpoints.js';

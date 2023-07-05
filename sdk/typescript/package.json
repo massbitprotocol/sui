@@ -8,7 +8,8 @@
 		"builder",
 		"dist",
 		"src",
-		"CHANGELOG.md"
+		"CHANGELOG.md",
+		"api"
 	],
 	"engines": {
 		"node": ">=16"
@@ -42,6 +43,11 @@
 			"source": "./src/keypairs/secp256r1/index.ts",
 			"import": "./dist/esm/keypairs/secp256r1/index.js",
 			"require": "./dist/cjs/keypairs/secp256r1/index.js"
+		},
+		"./api": {
+			"source": "./src/api/index.ts",
+			"import": "./dist/esm/api/index.js",
+			"require": "./dist/cjs/api/index.js"
 		}
 	},
 	"scripts": {
