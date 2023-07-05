@@ -9,11 +9,12 @@ use move_binary_format::{
     file_format::{Ability, AbilitySet, Bytecode},
 };
 use move_core_types::{account_address::AccountAddress, vm_status::StatusCode};
-use move_vm_types::{gas::GasMeter, loaded_data::runtime_types::Type, values::Locals};
+use move_vm_types::{loaded_data::runtime_types::Type, values::Locals};
 
 use crate::{
     interpreter::{check_ability, FrameInterface, InstrRet, InterpreterInterface},
     loader::{Function, Loader, Resolver},
+    plugin::Plugin,
 };
 
 const OPERAND_STACK_SIZE_LIMIT: usize = 1024;
@@ -57,7 +58,7 @@ impl TypeStack {
         Ok(args)
     }
 
-    fn check_balance(&self, interpreter: &impl InterpreterInterface) -> PartialVMResult<()> {
+    fn check_balance(&self, interpreter: &dyn InterpreterInterface) -> PartialVMResult<()> {
         // TODO(wlmyng): pass in operand_stack immutable
         if self.types.len() != interpreter.get_values_len() {
             return Err(
@@ -74,14 +75,8 @@ pub struct ParanoidTypeChecker {
     type_stack: TypeStack,
 }
 
-impl ParanoidTypeChecker {
-    pub fn new() -> Self {
-        Self {
-            type_stack: TypeStack::new(),
-        }
-    }
-
-    pub(crate) fn pre_hook_entrypoint(
+impl Plugin for ParanoidTypeChecker {
+    fn pre_hook_entrypoint(
         &mut self,
         function: &Arc<Function>,
         ty_args: &[Type],
@@ -106,10 +101,10 @@ impl ParanoidTypeChecker {
         Ok(())
     }
 
-    pub(crate) fn pre_hook_fn(
+    fn pre_hook_fn(
         &mut self,
-        interpreter: &impl InterpreterInterface,
-        current_frame: &mut FrameInterface,
+        interpreter: &dyn InterpreterInterface,
+        current_frame: &dyn FrameInterface,
         function: &Arc<Function>,
         ty_args: &[Type],
         link_context: AccountAddress,
@@ -146,12 +141,11 @@ impl ParanoidTypeChecker {
         Ok(())
     }
 
-    pub(crate) fn post_hook_fn(gas_meter: &mut impl GasMeter, function: &Arc<Function>) -> () {}
+    fn post_hook_fn(&mut self, _function: &Arc<Function>) -> () {}
 
-    pub(crate) fn pre_hook_instr(
+    fn pre_hook_instr(
         &mut self,
-        interpreter: &impl InterpreterInterface,
-        gas_meter: &mut impl GasMeter,
+        interpreter: &dyn InterpreterInterface,
         function: &Arc<Function>,
         instruction: &Bytecode,
         locals: &Locals,
@@ -171,10 +165,9 @@ impl ParanoidTypeChecker {
         Ok(())
     }
 
-    pub(crate) fn post_hook_instr(
+    fn post_hook_instr(
         &mut self,
-        interpreter: &impl InterpreterInterface,
-        gas_meter: &mut impl GasMeter,
+        interpreter: &dyn InterpreterInterface,
         function: &Arc<Function>,
         instruction: &Bytecode,
         ty_args: &[Type],
@@ -185,6 +178,14 @@ impl ParanoidTypeChecker {
 
         self.post_instr(interpreter, &local_tys, ty_args, resolver, instruction, r)?;
         Ok(())
+    }
+}
+
+impl ParanoidTypeChecker {
+    pub fn new() -> Self {
+        Self {
+            type_stack: TypeStack::new(),
+        }
     }
 
     fn push_parameter_types(
@@ -213,7 +214,7 @@ impl ParanoidTypeChecker {
 
     fn check_friend_or_private_call(
         &self,
-        interpreter: &impl InterpreterInterface,
+        interpreter: &dyn InterpreterInterface,
         caller: &Arc<Function>,
         callee: &Arc<Function>,
     ) -> VMResult<()> {
@@ -334,7 +335,7 @@ impl ParanoidTypeChecker {
 
     fn pre_instr(
         &mut self,
-        interpreter: &impl InterpreterInterface,
+        interpreter: &dyn InterpreterInterface,
         local_tys: &[Type],
         locals: &Locals,
         ty_args: &[Type],
@@ -354,7 +355,7 @@ impl ParanoidTypeChecker {
 
     fn post_instr(
         &mut self,
-        interpreter: &impl InterpreterInterface,
+        interpreter: &dyn InterpreterInterface,
         local_tys: &[Type],
         ty_args: &[Type],
         resolver: &Resolver,

@@ -6,6 +6,7 @@ use crate::{
     loader::{Function, Loader, Resolver},
     native_functions::NativeContext,
     paranoid_type_checker::ParanoidTypeChecker,
+    plugin::Plugin,
     trace,
 };
 use fail::fail_point;
@@ -130,8 +131,8 @@ impl Interpreter {
     }
 
     pub fn pre_hook_entrypoint(
-        interpreter: &mut Interpreter,
-        plugins: &mut Vec<ParanoidTypeChecker>,
+        _interpreter: &mut Interpreter,
+        plugins: &mut Vec<Box<dyn Plugin>>,
         gas_meter: &mut impl GasMeter,
         function: &Arc<Function>,
         ty_args: &[Type],
@@ -140,15 +141,8 @@ impl Interpreter {
     ) -> VMResult<()> {
         profile_open_frame!(gas_meter, function.pretty_string());
 
-        if interpreter.paranoid_type_checks {
-            for checker in plugins.iter_mut() {
-                checker.pre_hook_entrypoint(
-                    function,
-                    ty_args,
-                    data_store.link_context(),
-                    loader,
-                )?;
-            }
+        for plugin in plugins.iter_mut() {
+            plugin.pre_hook_entrypoint(function, ty_args, data_store.link_context(), loader)?;
         }
 
         Ok(())
@@ -156,7 +150,7 @@ impl Interpreter {
 
     pub fn pre_hook_fn(
         interpreter: &mut Interpreter,
-        plugins: &mut Vec<ParanoidTypeChecker>,
+        plugins: &mut Vec<Box<dyn Plugin>>,
         current_frame: &mut Frame,
         data_store: &mut impl DataStore,
         loader: &Loader,
@@ -166,19 +160,16 @@ impl Interpreter {
     ) -> VMResult<()> {
         #[cfg(debug_assertions)]
         profile_open_frame!(gas_meter, function.pretty_string());
-        let mut frame_interface = current_frame.frame_interface();
 
-        if interpreter.paranoid_type_checks {
-            for checker in plugins.iter_mut() {
-                checker.pre_hook_fn(
-                    interpreter,
-                    &mut frame_interface,
-                    function,
-                    ty_args,
-                    data_store.link_context(),
-                    loader,
-                )?;
-            }
+        for plugin in plugins.iter_mut() {
+            plugin.pre_hook_fn(
+                interpreter,
+                current_frame,
+                function,
+                ty_args,
+                data_store.link_context(),
+                loader,
+            )?;
         }
 
         Ok(())
@@ -190,7 +181,7 @@ impl Interpreter {
 
     pub fn pre_hook_instr(
         interpreter: &mut Interpreter,
-        plugins: &mut Vec<ParanoidTypeChecker>,
+        plugins: &mut Vec<Box<dyn Plugin>>,
         gas_meter: &mut impl GasMeter,
         function: &Arc<Function>,
         instruction: &Bytecode,
@@ -198,26 +189,24 @@ impl Interpreter {
         ty_args: &[Type],
         resolver: &Resolver,
     ) -> PartialVMResult<()> {
-        if interpreter.paranoid_type_checks {
-            for checker in plugins.iter_mut() {
-                checker.pre_hook_instr(
-                    interpreter,
-                    gas_meter,
-                    function,
-                    instruction,
-                    locals,
-                    ty_args,
-                    resolver,
-                )?;
-            }
+        for plugin in plugins.iter_mut() {
+            plugin.pre_hook_instr(
+                interpreter,
+                function,
+                instruction,
+                locals,
+                ty_args,
+                resolver,
+            )?;
         }
+
         profile_open_instr!(gas_meter, format!("{:?}", instruction));
         Ok(())
     }
 
     pub fn post_hook_instr(
         interpreter: &mut Interpreter,
-        plugins: &mut Vec<ParanoidTypeChecker>,
+        plugins: &mut Vec<Box<dyn Plugin>>,
         gas_meter: &mut impl GasMeter,
         function: &Arc<Function>,
         instruction: &Bytecode,
@@ -226,18 +215,8 @@ impl Interpreter {
         r: &InstrRet,
     ) -> PartialVMResult<()> {
         profile_close_instr!(gas_meter, format!("{:?}", instruction));
-        if interpreter.paranoid_type_checks {
-            for checker in plugins.iter_mut() {
-                checker.post_hook_instr(
-                    interpreter,
-                    gas_meter,
-                    function,
-                    instruction,
-                    ty_args,
-                    resolver,
-                    r,
-                )?;
-            }
+        for plugin in plugins.iter_mut() {
+            plugin.post_hook_instr(interpreter, function, instruction, ty_args, resolver, r)?;
         }
         Ok(())
     }
@@ -260,8 +239,11 @@ impl Interpreter {
             runtime_limits_config: loader.vm_config().runtime_limits_config.clone(),
         };
 
-        // TODO(wlmyng): pre- and post- plugins
-        let mut plugins: Vec<ParanoidTypeChecker> = vec![ParanoidTypeChecker::new()];
+        // TODO(wlmyng): better approach to instantiate plugins
+        let mut plugins: Vec<Box<dyn Plugin>> = vec![];
+        if interpreter.paranoid_type_checks {
+            plugins = vec![Box::new(ParanoidTypeChecker::new())];
+        }
 
         Self::pre_hook_entrypoint(
             &mut interpreter,
@@ -335,7 +317,7 @@ impl Interpreter {
         function: Arc<Function>,
         ty_args: Vec<Type>,
         args: Vec<Value>,
-        plugins: &mut Vec<ParanoidTypeChecker>,
+        plugins: &mut Vec<Box<dyn Plugin>>,
     ) -> VMResult<Vec<Value>> {
         let mut locals = Locals::new(function.local_count());
         for (i, value) in args.into_iter().enumerate() {
@@ -1182,31 +1164,29 @@ pub struct Frame {
     ty_args: Vec<Type>,
 }
 
-pub struct FrameInterface<'a> {
-    frame: &'a mut Frame,
+pub(crate) trait FrameInterface {
+    fn function(&self) -> &Arc<Function>;
+
+    fn get_frame(&self) -> &Frame;
 }
 
-impl<'a> FrameInterface<'a> {
-    pub(crate) fn function(&self) -> &Arc<Function> {
-        &self.frame.function()
+impl FrameInterface for Frame {
+    fn function(&self) -> &Arc<Function> {
+        &self.function
     }
 
-    pub fn get_frame(&self) -> &Frame {
-        self.frame
+    fn get_frame(&self) -> &Frame {
+        self
     }
 }
 
 impl Frame {
-    pub fn frame_interface(&mut self) -> FrameInterface {
-        FrameInterface { frame: self }
-    }
-
     /// Execute a Move function until a return or a call opcode is found.
     fn execute_code(
         &mut self,
         resolver: &Resolver,
         interpreter: &mut Interpreter,
-        plugins: &mut Vec<ParanoidTypeChecker>,
+        plugins: &mut Vec<Box<dyn Plugin>>,
         data_store: &mut impl DataStore,
         gas_meter: &mut impl GasMeter,
     ) -> VMResult<ExitCode> {
@@ -1776,7 +1756,7 @@ impl Frame {
         &mut self,
         resolver: &Resolver,
         interpreter: &mut Interpreter,
-        plugins: &mut Vec<ParanoidTypeChecker>,
+        plugins: &mut Vec<Box<dyn Plugin>>,
         data_store: &mut impl DataStore,
         gas_meter: &mut impl GasMeter,
     ) -> PartialVMResult<ExitCode> {
@@ -1871,10 +1851,6 @@ impl Frame {
 
     pub fn ty_args(&self) -> &[Type] {
         &self.ty_args
-    }
-
-    pub(crate) fn function(&self) -> &Arc<Function> {
-        &self.function
     }
 
     fn resolver<'a>(&self, link_context: AccountAddress, loader: &'a Loader) -> Resolver<'a> {
