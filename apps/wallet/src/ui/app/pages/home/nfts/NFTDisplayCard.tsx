@@ -1,7 +1,7 @@
 // Copyright (c) Mysten Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-import { useGetObject } from '@mysten/core';
+import { isKioskOwnerToken, useGetObject } from '@mysten/core';
 import { formatAddress } from '@mysten/sui.js';
 import { cva, cx } from 'class-variance-authority';
 
@@ -50,6 +50,7 @@ export function NFTDisplayCard({
 	const nftName = nftMeta?.name || formatAddress(objectId);
 	const nftImageUrl = nftMeta?.imageUrl || '';
 	const video = useResolveVideo(objectData);
+	const isOwnerToken = isKioskOwnerToken(objectData);
 	const fileExtensionType = useFileExtensionType(nftImageUrl);
 
 	return (
@@ -62,7 +63,7 @@ export function NFTDisplayCard({
 						name={nftName}
 						src={nftImageUrl}
 						title={nftMeta?.description || ''}
-						animateHover={true}
+						animateHover
 						showLabel={!wideView}
 						borderRadius={borderRadius}
 						size={size}
@@ -90,7 +91,7 @@ export function NFTDisplayCard({
 							animateHover ? 'group-hover:text-black duration-200 ease-ease-in-out-cubic' : '',
 						)}
 					>
-						{nftName}
+						{isOwnerToken ? 'Kiosk' : nftName}
 					</div>
 				)}
 			</Loading>

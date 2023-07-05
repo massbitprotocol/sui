@@ -1,7 +1,7 @@
 // Copyright (c) Mysten Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-import { useGetObject } from '@mysten/core';
+import { isKioskOwnerToken, useGetObject } from '@mysten/core';
 import { formatAddress } from '@mysten/sui.js';
 import { cva, cx } from 'class-variance-authority';
 
@@ -12,6 +12,7 @@ import { NftImage, type NftImageProps } from '_components/nft-display/NftImage';
 import { useGetNFTMeta, useFileExtensionType } from '_hooks';
 
 import type { VariantProps } from 'class-variance-authority';
+import { Kiosk } from './Kiosk';
 
 const nftDisplayCardStyles = cva('relative flex flex-nowrap items-center h-full', {
 	variants: {
@@ -53,11 +54,13 @@ export function NFTDisplayCard({
 	const nftImageUrl = nftMeta?.imageUrl || '';
 	const video = useResolveVideo(objectData);
 	const fileExtensionType = useFileExtensionType(nftImageUrl);
-
+	const isOwnerToken = isKioskOwnerToken(objectData);
 	return (
 		<div className={nftDisplayCardStyles({ animateHover, wideView })}>
 			<Loading loading={isLoading}>
-				{video && playable ? (
+				{objectData?.data && isOwnerToken ? (
+					<Kiosk object={objectData} borderRadius={borderRadius} size={size} />
+				) : video && playable ? (
 					<video controls className="h-full w-full rounded-md overflow-hidden" src={video} />
 				) : (
 					<NftImage

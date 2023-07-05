@@ -7,15 +7,17 @@ import {
 	hasDisplayData,
 	useGetKioskContents,
 } from '@mysten/core';
-import { type SuiObjectData } from '@mysten/sui.js';
+import { getObjectDisplay, SuiObjectResponse, type SuiObjectData } from '@mysten/sui.js';
 
+import cl from 'classnames';
 import { NFTDisplayCard, type NFTDisplayCardProps } from '.';
 import { useActiveAddress } from '../../hooks';
 import { Text } from '../../shared/text';
+import { NftImage, nftImageStyles } from './NftImage';
 
-interface KioskProps extends NFTDisplayCardProps {
-	object: SuiObjectData;
-}
+type KioskProps = {
+	object: SuiObjectResponse;
+} & Partial<NFTDisplayCardProps>;
 
 const styles: Record<number, string> = {
 	0: 'group-hover:scale-95 shadow-md z-20 -top-[0px]',
@@ -29,34 +31,38 @@ export function Kiosk({ object, ...nftDisplayCardProps }: KioskProps) {
 	const kioskId = getKioskIdFromDynamicFields(object);
 	const suiKiosk = kioskData?.kiosks.sui.get(kioskId) as KioskContents;
 	const obKiosk = kioskData?.kiosks.originByte.get(kioskId) as OriginByteKioskContents;
-	const items = (suiKiosk?.items ?? obKiosk?.items)
-		.sort((item) => (hasDisplayData(item) ? -1 : 1))
-		.slice(0, 3);
+	const items = (suiKiosk?.items ?? obKiosk?.items).sort((item) => (hasDisplayData(item) ? -1 : 1));
 
 	return (
-		<div className="relative ease-ease-out-cubic origin-bottom duration-250 hover:bg-transparent group transition-all h-full w-full bg-black flex flex-col justify-between">
+		<div className="relative hover:bg-transparent group transition-all flex justify-between h-36 w-36 rounded-xl">
 			<div className="absolute z-0">
 				{items.length &&
-					items.map((item, idx) => {
+					items.slice(0, 3).map((item, idx) => {
+						const display = getObjectDisplay(item)?.data;
+						if (!display) return null;
 						return (
-							<div className={`absolute transition-all ease-ease-out-cubic ${styles[idx] ?? ''}`}>
-								<NFTDisplayCard
-									{...nftDisplayCardProps}
-									animateHover={false}
-									objectId={item.data?.objectId!}
+							<div
+								className={cl(
+									'absolute transition-all ease-ease-out-cubic duration-250 rounded-xl',
+									styles[idx],
+								)}
+							>
+								<NftImage
+									src={display.image_url}
+									title={display.description}
+									borderRadius={nftDisplayCardProps.borderRadius}
+									size={nftDisplayCardProps.size}
+									name="Kiosk"
+									showLabel
 								/>
 							</div>
 						);
 					})}
 			</div>
-			<div className="right-5 bottom-5.5 flex items-center justify-center absolute h-6 w-6 bg-gray-100 text-white rounded-md">
+			<div className="right-1.5 bottom-1.5 flex items-center justify-center absolute h-6 w-6 bg-gray-100 text-white rounded-md">
 				<Text variant="subtitle" weight="medium">
 					{items?.length}
 				</Text>
-			</div>
-
-			<div className="flex-1 mt-2 text-steel-dark truncate overflow-hidden max-w-full group-hover:text-black duration-200 ease-ease-in-out-cubic">
-				Kiosk
 			</div>
 		</div>
 	);

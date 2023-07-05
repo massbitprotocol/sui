@@ -1,7 +1,7 @@
 // Copyright (c) Mysten Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-import { isKioskOwnerToken, useOnScreen } from '@mysten/core';
+import { getKioskIdFromDynamicFields, isKioskOwnerToken, useOnScreen } from '@mysten/core';
 import { useRef, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 
@@ -12,7 +12,6 @@ import Loading from '_components/loading';
 import LoadingSpinner from '_components/loading/LoadingIndicator';
 import { NFTDisplayCard } from '_components/nft-display';
 import { ampli } from '_src/shared/analytics/ampli';
-import { Kiosk } from '_src/ui/app/components/nft-display/Kiosk';
 import { useGetNFTs } from '_src/ui/app/hooks/useGetNFTs';
 import PageTitle from '_src/ui/app/shared/PageTitle';
 
@@ -64,11 +63,21 @@ function NftsPage() {
 						{ownedAssets.map((object) =>
 							isKioskOwnerToken(object) ? (
 								<Link
-									to={`/kiosk?${new URLSearchParams({ kioskId: object.objectId })}`}
+									to={`/kiosk?${new URLSearchParams({
+										kioskId: getKioskIdFromDynamicFields(object),
+									})}`}
 									key={object.objectId}
 									className="no-underline"
 								>
-									<Kiosk object={object} objectId={object.objectId} size="lg" />
+									<ErrorBoundary>
+										<NFTDisplayCard
+											objectId={object.objectId}
+											size="lg"
+											showLabel
+											animateHover
+											borderRadius="xl"
+										/>
+									</ErrorBoundary>
 								</Link>
 							) : (
 								<Link

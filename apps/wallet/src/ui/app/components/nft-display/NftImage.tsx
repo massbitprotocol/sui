@@ -8,7 +8,7 @@ import { useState } from 'react';
 
 import type { VariantProps } from 'class-variance-authority';
 
-const nftImageStyles = cva('overflow-hidden bg-gray-40 relative', {
+export const nftImageStyles = cva('overflow-hidden bg-gray-40 relative', {
 	variants: {
 		animateHover: {
 			true: [
@@ -48,6 +48,7 @@ export interface NftImageProps extends VariantProps<typeof nftImageStyles> {
 	title?: string;
 	showLabel?: boolean;
 	playable?: boolean;
+	className?: string;
 }
 
 export function NftImage({
@@ -60,11 +61,13 @@ export function NftImage({
 	size,
 	video,
 	playable,
+	className,
 }: NftImageProps) {
 	const [error, setError] = useState(false);
 	const imgCls = cl(
 		'w-full h-full object-cover',
 		animateHover && 'group-hover:scale-110 duration-500 ease-ease-out-cubic',
+		className,
 	);
 	const imgSrc = src ? src.replace(/^ipfs:\/\//, 'https://ipfs.io/ipfs/') : '';
 	return (
