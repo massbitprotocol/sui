@@ -1,5 +1,11 @@
 # @mysten/sui.js
 
+## 0.38.0
+
+### Minor Changes
+
+- 67e581a5a: Added FromOrToAddress Transaction Filter
+
 ## 0.37.1
 
 ### Patch Changes
