@@ -62,3 +62,5 @@ yarn-error.log*
 # misc
 *.key
 .env
+**/release
+**/debug

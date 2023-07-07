@@ -1,0 +1,3 @@
+metrics-address: "0.0.0.0:9184"
+# this address is also used for web socket connections
+json-rpc-address: "0.0.0.0:9000"
