@@ -1,8 +1,8 @@
 # Production Image
 FROM debian:bullseye AS runtime
 # Use jemalloc as memory allocator
-RUN apt-get update && apt-get install -y libjemalloc-dev libpq-dev htop curl nginx
-ENV LD_PRELOAD /usr/lib/x86_64-linux-gnu/libjemalloc.so
+RUN apt-get update && apt-get install -y libjemalloc-dev libpq-dev htop curl nginx libssl-dev
+ENV LD_PRELOAD /usr/lib/x86_64-linux-gnu/libjemalloc.so 
 ARG PROFILE=release
 WORKDIR sui
 # # Both bench and release profiles copy from release dir

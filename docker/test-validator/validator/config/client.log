@@ -1,0 +1,10 @@
+Config file ["/root/.sui/sui_config/client.yaml"] doesn't exist, do you want to connect to a Sui Full node server [y/N]?y
+Sui Full node server URL (Defaults to Sui Devnet if not specified) : 
+Select key scheme to generate keypair (0 for ed25519, 1 for secp256k1, 2: for secp256r1):
+1
+Generated new keypair for address with scheme "secp256k1" [0xb69924366de7fc760b079935ac6cc05ef8f3a14ef4ab9244f993a8fdadb1b346]
+Secret Recovery Phrase : [run suggest verify unique lava body require wasp giggle royal dry never]
+
+
+Created new keypair for address with scheme ED25519: [0x7b825fd318f54a12956506191f1a777f5d85d80699594282565b03234a77f751]
+Secret Recovery Phrase : [head filter city panther ranch picnic cross series program author raccoon drum]

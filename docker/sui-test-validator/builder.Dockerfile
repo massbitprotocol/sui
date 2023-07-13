@@ -1,7 +1,8 @@
 FROM rust:1.70.0 AS chef
 ARG PROFILE=release
 WORKDIR sui
-RUN apt-get update && apt-get install -y cmake clang libpq-dev
+RUN apt-get update && apt-get install -y cmake clang libpq-dev git libssl-dev
+RUN apt-get install -y protobuf-compiler libprotobuf-dev
 
 # For now disable caching
 

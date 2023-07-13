@@ -1,0 +1,7 @@
+Starting nginx: nginx.
+Fullnode RPC URL: http://127.0.0.1:9000
+Stop node /ip4/127.0.0.1/tcp/36055/http
+Stop node /ip4/127.0.0.1/tcp/42949/http
+Stop node /ip4/127.0.0.1/tcp/39081/http
+Stop node /ip4/127.0.0.1/tcp/36059/http
+Stop node /ip4/127.0.0.1/tcp/37135/http

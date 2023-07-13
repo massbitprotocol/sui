@@ -49,8 +49,8 @@ services:
     # populate your local ./fullnode/config/ directory with fullnode.yaml and genesis.blob for the network you want to use.
     volumes:
       - ./validator:/opt/sui
-      - ./validator/debug/sui-test-validator:/usr/local/bin/sui-test-validator
-      - ./validator/debug/sui:/usr/local/bin/sui
+      # - ./validator/debug/sui-test-validator:/usr/local/bin/sui-test-validator
+      # - ./validator/debug/sui:/usr/local/bin/sui
       - ./validator/nginx.conf:/etc/nginx/sites-available/default
     ports:
       - 9000:8000

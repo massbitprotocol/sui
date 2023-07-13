@@ -1,0 +1,9 @@
+---
+keystore:
+  File: /opt/sui/0x63aab32e9cf8748e9e9bbb4caaa36778eb778aeb92814ebd75cfeff56f639e4a.key
+envs:
+  - alias: local
+    rpc: "http://127.0.0.1:9000"
+    ws: ~
+active_env: local
+active_address: "0x63aab32e9cf8748e9e9bbb4caaa36778eb778aeb92814ebd75cfeff56f639e4a"

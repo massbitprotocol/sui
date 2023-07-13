@@ -88,7 +88,6 @@ async fn main() -> Result<()> {
     } else {
         Some(epoch_duration_ms)
     };
-
     let cluster = LocalNewCluster::start(&ClusterTestOpt {
         env: Env::NewLocal,
         fullnode_address: Some(format!("127.0.0.1:{}", fullnode_rpc_port)),
@@ -102,7 +101,7 @@ async fn main() -> Result<()> {
         config_dir,
     })
     .await?;
-
+    
     println!("Fullnode RPC URL: {}", cluster.fullnode_url());
 
     if with_indexer {
@@ -111,9 +110,13 @@ async fn main() -> Result<()> {
             cluster.indexer_url().clone().unwrap_or_default()
         );
     }
-
     start_faucet(&cluster, faucet_port).await?;
-
+    println!("Finished faucet");
+    let swarm = cluster.swarm();
+    swarm.all_nodes().for_each(|node|{
+        println!("Stop node {}", node.config.network_address());
+        node.stop();
+    });
     Ok(())
 }
 
