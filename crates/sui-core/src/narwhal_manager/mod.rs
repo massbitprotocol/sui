@@ -4,7 +4,7 @@
 #[cfg(test)]
 #[path = "../unit_tests/narwhal_manager_tests.rs"]
 pub mod narwhal_manager_tests;
-
+use async_trait::async_trait;
 use fastcrypto::traits::KeyPair;
 use mysten_metrics::RegistryService;
 use narwhal_config::{Committee, Epoch, Parameters, WorkerCache, WorkerId};
@@ -15,13 +15,13 @@ use narwhal_node::worker_node::WorkerNodes;
 use narwhal_node::{CertificateStoreCacheMetrics, NodeStorage};
 use narwhal_worker::TransactionValidator;
 use prometheus::{register_int_gauge_with_registry, IntGauge, Registry};
+use scalar_rpc::GrpcNode;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Instant;
 use sui_protocol_config::{ProtocolConfig, ProtocolVersion};
 use sui_types::crypto::{AuthorityKeyPair, NetworkKeyPair};
 use tokio::sync::Mutex;
-
 #[derive(PartialEq)]
 enum Running {
     True(Epoch, ProtocolVersion),
@@ -81,6 +81,7 @@ pub struct NarwhalManager {
     network_keypair: NetworkKeyPair,
     worker_ids_and_keypairs: Vec<(WorkerId, NetworkKeyPair)>,
     primary_node: PrimaryNode,
+    grpc_node: GrpcNode,
     worker_nodes: WorkerNodes,
     storage_base_path: PathBuf,
     running: Mutex<Running>,
@@ -96,7 +97,11 @@ impl NarwhalManager {
             true,
             config.registry_service.clone(),
         );
-
+        let grpc_node = GrpcNode::new(
+            config.parameters.clone(),
+            true,
+            config.registry_service.clone(),
+        );
         // Create Narwhal Workers with configuration
         let worker_nodes =
             WorkerNodes::new(config.registry_service.clone(), config.parameters.clone());
@@ -106,6 +111,7 @@ impl NarwhalManager {
 
         Self {
             primary_node,
+            grpc_node,
             worker_nodes,
             primary_keypair: config.primary_keypair,
             network_keypair: config.network_keypair,
@@ -143,7 +149,7 @@ impl NarwhalManager {
             );
             return;
         }
-
+        let tx_validator = TrivialTransactionValidator::default();
         let now = Instant::now();
 
         // Create a new store
@@ -192,7 +198,36 @@ impl NarwhalManager {
                 }
             }
         }
-
+        // Start Narwhal Grpc Server
+        const MAX_GRPCSERVER_RETRIES: u32 = 2;
+        let mut grpc_retries = 0;
+        loop {
+            //Todo: Update to new Epoch
+            match self
+                .grpc_node
+                .start(
+                    self.primary_keypair.copy(),
+                    self.network_keypair.copy(),
+                    committee.clone(),
+                    protocol_config.clone(),
+                    worker_cache.clone(),
+                    execution_state.clone(),
+                )
+                .await
+            {
+                Ok(_) => {
+                    break;
+                }
+                Err(e) => {
+                    grpc_retries += 1;
+                    if grpc_retries >= MAX_GRPCSERVER_RETRIES {
+                        panic!("Unable to start Narwhal Grpc Server: {:?}", e);
+                    }
+                    tracing::error!("Unable to start Narwhal Grpc Server: {:?}, retrying", e);
+                    tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
+                }
+            }
+        }
         // Start Narwhal Workers with configuration
         const MAX_WORKER_RETRIES: u32 = 2;
         let mut worker_retries = 0;
@@ -264,6 +299,7 @@ impl NarwhalManager {
                 );
 
                 self.primary_node.shutdown().await;
+                self.grpc_node.shutdown().await;
                 self.worker_nodes.shutdown().await;
 
                 tracing::info!(
@@ -293,5 +329,25 @@ impl NarwhalManager {
 
     pub fn get_storage_base_path(&self) -> PathBuf {
         self.storage_base_path.clone()
+    }
+}
+
+/// Simple validator that accepts all transactions and batches.
+#[derive(Debug, Clone, Default)]
+pub struct TrivialTransactionValidator;
+#[async_trait::async_trait]
+impl TransactionValidator for TrivialTransactionValidator {
+    type Error = eyre::Report;
+
+    fn validate(&self, _t: &[u8]) -> Result<(), Self::Error> {
+        Ok(())
+    }
+
+    async fn validate_batch(
+        &self,
+        _b: &narwhal_types::Batch,
+        _protocol_config: &ProtocolConfig,
+    ) -> Result<(), Self::Error> {
+        Ok(())
     }
 }

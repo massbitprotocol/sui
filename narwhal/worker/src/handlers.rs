@@ -48,6 +48,7 @@ impl<V: TransactionValidator> WorkerToWorker for WorkerReceiverHandler<V> {
             .validate_batch(&message.batch, &self.protocol_config)
             .await
         {
+            println!("report_batch {:?}", &message.batch);
             return Err(anemo::rpc::Status::new_with_message(
                 StatusCode::BadRequest,
                 format!("Invalid batch: {err}"),

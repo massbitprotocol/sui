@@ -1,5 +1,4 @@
 use anyhow::Error;
-use async_trait::async_trait;
 use ethabi::{Error as ABIError, Function, ParamType, Token};
 use futures::Future;
 use graph::blockchain::ChainIdentifier;
@@ -17,12 +16,12 @@ use thiserror::Error;
 use tiny_keccak::keccak256;
 use web3::types::{Address, Log, H256};
 
+use graph::prelude::*;
 use graph::{
     blockchain as bc,
     components::metrics::{CounterVec, GaugeVec, HistogramVec},
     petgraph::{self, graphmap::GraphMap},
 };
-use scalar_core::prelude::*;
 
 const COMBINED_FILTER_TYPE_URL: &str =
     "type.googleapis.com/sf.ethereum.transform.v1.CombinedFilter";

@@ -1,27 +1,68 @@
-use hex_literal::hex;
-use tracing::{debug, error, info};
-use tracing_subscriber;
+use common::{
+    endpoint::EndpointMetrics,
+    env::env_var,
+    firehose,
+    firehose::FirehoseEndpoint,
+    grpc,
+    log::logger,
+    prelude::{prost::Message, Error, MetricsRegistry},
+};
+use scalar_chain_ethereum::codec;
+use std::sync::Arc;
+use tonic::Streaming;
+const URL: &str = "https://eth-mainnet.g.alchemy.com/v2/9u1mZJtSKl2NgzRA9i0rh5_QIPQi4pTU";
 
 #[tokio::main]
-async fn main() -> web3::Result<()> {
-    //tracing_subscriber::fmt::init();
-    let subscriber = tracing_subscriber::FmtSubscriber::new();
-    let _ = tracing::subscriber::set_global_default(subscriber);
-    let url = "wss://eth-mainnet.g.alchemy.com/v2/9u1mZJtSKl2NgzRA9i0rh5_QIPQi4pTU";
-    //let url = "wss://api.streamingfast.io:443";
-    let transport = web3::transports::WebSocket::new(url).await?;
-    let web3 = web3::Web3::new(transport);
-    info!(excitement = "yay!", "hello! I'm gonna shave a yak.");
-    println!("Calling accounts.");
-    let mut accounts = web3.eth().accounts().await?;
-    println!("Accounts: {:?}", accounts);
-    accounts.push(hex!("00a329c0648769a73afac7f9381e08fb43dbea72").into());
-
-    println!("Calling balance.");
-    for account in accounts {
-        let balance = web3.eth().balance(account, None).await?;
-        println!("Balance of {:?}: {}", account, balance);
+async fn main() -> Result<(), Error> {
+    let mut cursor: Option<String> = None;
+    let token_env = env_var("CHAIN_ACCESS_TOKEN", "".to_string());
+    let mut token: Option<String> = None;
+    if !token_env.is_empty() {
+        token = Some(token_env);
     }
+    let host = URL.to_string();
+    let logger = logger(false);
+    let metrics = Arc::new(EndpointMetrics::new(
+        logger,
+        &[host.clone()],
+        Arc::new(MetricsRegistry::mock()),
+    ));
+    let grpc = Arc::new(grpc::new("grpc", &host, token, false, false, metrics));
 
+    loop {
+        println!("Connecting to the stream!");
+        let request = grpc::GRpcBlockRequest {
+            start_block_num: 12369739,
+            stop_block_num: 12369739,
+            cursor: match &cursor {
+                Some(c) => c.clone(),
+                None => String::from(""),
+            },
+            final_blocks_only: false,
+            ..Default::default()
+        };
+        let mut stream: Streaming<grpc::Response> = match grpc.clone().stream_blocks(request).await
+        {
+            Ok(s) => s,
+            Err(e) => {
+                println!("Could not connect to stream! {}", e);
+                continue;
+            }
+        };
+        loop {
+            let resp = match stream.message().await {
+                Ok(Some(t)) => t,
+                Ok(None) => {
+                    println!("Stream completed");
+                    return Ok(());
+                }
+                Err(e) => {
+                    println!("Error getting message {}", e);
+                    break;
+                }
+            };
+            let b = codec::Block::decode(resp.block.unwrap().value.as_ref());
+        }
+    }
     Ok(())
 }

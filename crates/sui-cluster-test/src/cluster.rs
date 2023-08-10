@@ -208,7 +208,7 @@ impl Cluster for LocalNewCluster {
         if let Some(rpc_port) = fullnode_port {
             cluster_builder = cluster_builder.with_fullnode_rpc_port(rpc_port);
         }
-
+        
         let mut test_cluster = cluster_builder.build().await;
 
         // Use the wealthy account for faucet

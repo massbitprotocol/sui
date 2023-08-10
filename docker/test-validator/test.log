@@ -1,0 +1,13 @@
+2023-08-08T08:15:54.686349Z  INFO node{name=k#99f25ef6..}:start:start: narwhal_worker::worker: Worker 0 listening to worker messages on /ip4/0.0.0.0/udp/34453
+2023-08-08T08:15:54.687646Z  INFO node{name=k#addeef94..}:start:construct_dag_from_cert_store: narwhal_consensus::consensus: Dag is restored and contains 0 certs for 0 rounds
+2023-08-08T08:15:54.698245Z  INFO node{name=k#99f25ef6..}:start:start: narwhal_worker::worker: Adding others workers with peer id fa25af40a50b001f022be41958d8c0893cc07f16e65e68ba7b3af799a45732e0 and address 127.0.0.1:36325
+2023-08-08T08:15:54.698386Z  INFO node{name=k#99f25ef6..}:start:start: narwhal_worker::worker: Adding others workers with peer id 279176d29e941c48582c719aca8ebe88bf06b1b9f4eec095800678eba17efd5f and address 127.0.0.1:35643
+2023-08-08T08:15:54.698461Z  INFO node{name=k#99f25ef6..}:start:start: narwhal_worker::worker: Adding others workers with peer id 4a225f14aaa660fd7ebe74287754741c422b8c2192652e44ba2532c87fc9b9b5 and address 127.0.0.1:33947
+2023-08-08T08:15:54.698547Z  INFO node{name=k#99f25ef6..}:start:start: narwhal_worker::worker: Adding our primary with peer id 96744d02f3961363fcf94808c1352381064790f7231ed977624cb34bb3116291 and address 127.0.0.1:39121
+2023-08-08T08:15:54.698690Z  INFO node{name=k#99f25ef6..}:start:start: narwhal_worker::worker: Worker 0 listening to network admin messages on 127.0.0.1:41217
+2023-08-08T08:15:54.699001Z  INFO node{name=k#99f25ef6..}:start:start: narwhal_network::admin: starting admin server address=127.0.0.1:41217
+2023-08-08T08:15:54.699100Z  INFO node{name=k#99f25ef6..}:start:start: narwhal_worker::worker: Starting handler for transactions
+2023-08-08T08:15:54.699338Z  INFO node{name=k#99f25ef6..}:start:start: narwhal_worker::worker: Worker 0 listening to client transactions on /ip4/0.0.0.0/tcp/46259/http
+2023-08-08T08:15:54.699451Z  INFO node{name=k#99f25ef6..}:start:start: narwhal_worker::worker: Worker 0 successfully booted on /ip4/127.0.0.1/tcp/46259/http
+2023-08-08T08:15:54.699901Z  INFO node{name=k#99f25ef6..}: sui_core::narwhal_manager: Starting up Narwhal for epoch 0 & protocol version ProtocolVersion(18) is complete - took 0.967682499 seconds
+2023-08-08T08:15:54.700222Z  INFO node{name=k#99f25ef6..}: sui_node: SuiNode started!

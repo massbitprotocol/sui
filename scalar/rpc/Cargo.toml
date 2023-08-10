@@ -1,0 +1,74 @@
+[package]
+name = "scalar-rpc"
+version = "0.1.0"
+authors = ["Codelight <tai@codelight.co>"]
+description = "RPC interfaces for integration between logic and consensus layers."
+license = "Apache-2.0"
+publish = false
+edition = "2021"
+
+[dependencies]
+# Common dependencies
+anemo.workspace = true
+arc-swap.workspace = true
+bytes.workspace = true
+fastcrypto.workspace = true
+futures.workspace = true
+mysten-metrics.workspace = true
+mysten-network.workspace = true
+narwhal-config.workspace = true
+narwhal-crypto.workspace = true
+narwhal-executor.workspace = true
+narwhal-node.workspace = true
+narwhal-types.workspace = true
+narwhal-worker.workspace = true
+tokio = { version = "1.0", features = ["rt-multi-thread", "macros"] }
+tokio-stream = { version = "0.1.14" }
+prometheus.workspace = true
+prost.workspace = true
+tonic.workspace = true
+# Optional dependencies
+tonic-web = { version = "0.9", optional = true }
+tonic-health.workspace = true
+tonic-reflection = { version = "0.9", optional = true }
+tonic-types = { version = "0.9", optional = true }
+either = { version = "1.9", optional = true }
+async-stream = { version = "0.3", optional = true }
+tower = { version = "0.4", optional = true }
+rand = { version = "0.8", optional = true }
+serde = { version = "1.0", features = ["derive"], optional = true }
+serde_json = { version = "1.0", optional = true }
+sui-protocol-config.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+prost-types = { version = "0.11", optional = true }
+h2 = { version = "0.3", optional = false }
+http = { version = "0.2", optional = true }
+http-body = { version = "0.4.2", optional = true }
+hyper = { version = "0.14", optional = true }
+warp = { version = "0.3.4", default-features = false, optional = true }
+listenfd = { version = "1.0", optional = true }
+
+tokio-rustls = { version = "0.24.0", optional = true }
+hyper-rustls = { version = "0.24.0", features = ["http2"], optional = true }
+rustls-pemfile = { version = "1", optional = true }
+tower-http = { version = "0.4", optional = true }
+
+[build-dependencies]
+tonic-build = "0.9.2"
+
+[[example]]
+name="rpc-client"
+path="examples/rpc-client.rs"
+
+[[example]]
+name="rpc-server"
+path="examples/rpc-server.rs"
+
+[[example]]
+name="abci-client"
+path="examples/abci-client.rs"
+
+[[example]]
+name="abci-server"
+path="examples/abci-server.rs"
