@@ -19,8 +19,8 @@ pub struct ScalarAbciResponse {
 /// Generated client implementations.
 pub mod scalar_abci_client {
     #![allow(unused_variables, dead_code, missing_docs, clippy::let_unit_value)]
-    use tonic::codegen::http::Uri;
     use tonic::codegen::*;
+    use tonic::codegen::http::Uri;
     /// Echo is the echo service.
     #[derive(Debug, Clone)]
     pub struct ScalarAbciClient<T> {
@@ -65,8 +65,9 @@ pub mod scalar_abci_client {
                     <T as tonic::client::GrpcService<tonic::body::BoxBody>>::ResponseBody,
                 >,
             >,
-            <T as tonic::codegen::Service<http::Request<tonic::body::BoxBody>>>::Error:
-                Into<StdError> + Send + Sync,
+            <T as tonic::codegen::Service<
+                http::Request<tonic::body::BoxBody>,
+            >>::Error: Into<StdError> + Send + Sync,
         {
             ScalarAbciClient::new(InterceptedService::new(inner, interceptor))
         }
@@ -101,26 +102,33 @@ pub mod scalar_abci_client {
             self.inner = self.inner.max_encoding_message_size(limit);
             self
         }
-        /// UnaryScalarEbci is unary echo.
+        /// UnaryEcho is unary echo.
         pub async fn unary_scalar_abci(
             &mut self,
             request: impl tonic::IntoRequest<super::ScalarAbciRequest>,
-        ) -> std::result::Result<tonic::Response<super::ScalarAbciResponse>, tonic::Status>
-        {
-            self.inner.ready().await.map_err(|e| {
-                tonic::Status::new(
-                    tonic::Code::Unknown,
-                    format!("Service was not ready: {}", e.into()),
-                )
-            })?;
+        ) -> std::result::Result<
+            tonic::Response<super::ScalarAbciResponse>,
+            tonic::Status,
+        > {
+            self.inner
+                .ready()
+                .await
+                .map_err(|e| {
+                    tonic::Status::new(
+                        tonic::Code::Unknown,
+                        format!("Service was not ready: {}", e.into()),
+                    )
+                })?;
             let codec = tonic::codec::ProstCodec::default();
-            let path = http::uri::PathAndQuery::from_static("/abci.ScalarAbci/UnaryScalarAbci");
+            let path = http::uri::PathAndQuery::from_static(
+                "/abci.ScalarAbci/UnaryScalarAbci",
+            );
             let mut req = request.into_request();
             req.extensions_mut()
                 .insert(GrpcMethod::new("abci.ScalarAbci", "UnaryScalarAbci"));
             self.inner.unary(req, path, codec).await
         }
-        /// ServerStreamingScalarAbci is server side streaming.
+        /// ServerStreamingEcho is server side streaming.
         pub async fn server_streaming_scalar_abci(
             &mut self,
             request: impl tonic::IntoRequest<super::ScalarAbciRequest>,
@@ -128,42 +136,48 @@ pub mod scalar_abci_client {
             tonic::Response<tonic::codec::Streaming<super::ScalarAbciResponse>>,
             tonic::Status,
         > {
-            self.inner.ready().await.map_err(|e| {
-                tonic::Status::new(
-                    tonic::Code::Unknown,
-                    format!("Service was not ready: {}", e.into()),
-                )
-            })?;
+            self.inner
+                .ready()
+                .await
+                .map_err(|e| {
+                    tonic::Status::new(
+                        tonic::Code::Unknown,
+                        format!("Service was not ready: {}", e.into()),
+                    )
+                })?;
             let codec = tonic::codec::ProstCodec::default();
-            let path =
-                http::uri::PathAndQuery::from_static("/abci.ScalarAbci/ServerStreamingScalarAbci");
+            let path = http::uri::PathAndQuery::from_static(
+                "/abci.ScalarAbci/ServerStreamingScalarAbci",
+            );
             let mut req = request.into_request();
-            req.extensions_mut().insert(GrpcMethod::new(
-                "abci.ScalarAbci",
-                "ServerStreamingScalarAbci",
-            ));
+            req.extensions_mut()
+                .insert(GrpcMethod::new("abci.ScalarAbci", "ServerStreamingScalarAbci"));
             self.inner.server_streaming(req, path, codec).await
         }
-        /// ClientStreamingScalarAbci is client side streaming.
+        /// ClientStreamingEcho is client side streaming.
         pub async fn client_streaming_scalar_abci(
             &mut self,
             request: impl tonic::IntoStreamingRequest<Message = super::ScalarAbciRequest>,
-        ) -> std::result::Result<tonic::Response<super::ScalarAbciResponse>, tonic::Status>
-        {
-            self.inner.ready().await.map_err(|e| {
-                tonic::Status::new(
-                    tonic::Code::Unknown,
-                    format!("Service was not ready: {}", e.into()),
-                )
-            })?;
+        ) -> std::result::Result<
+            tonic::Response<super::ScalarAbciResponse>,
+            tonic::Status,
+        > {
+            self.inner
+                .ready()
+                .await
+                .map_err(|e| {
+                    tonic::Status::new(
+                        tonic::Code::Unknown,
+                        format!("Service was not ready: {}", e.into()),
+                    )
+                })?;
             let codec = tonic::codec::ProstCodec::default();
-            let path =
-                http::uri::PathAndQuery::from_static("/abci.ScalarAbci/ClientStreamingScalarAbci");
+            let path = http::uri::PathAndQuery::from_static(
+                "/abci.ScalarAbci/ClientStreamingScalarAbci",
+            );
             let mut req = request.into_streaming_request();
-            req.extensions_mut().insert(GrpcMethod::new(
-                "abci.ScalarAbci",
-                "ClientStreamingScalarAbci",
-            ));
+            req.extensions_mut()
+                .insert(GrpcMethod::new("abci.ScalarAbci", "ClientStreamingScalarAbci"));
             self.inner.client_streaming(req, path, codec).await
         }
         /// BidirectionalStreamingScalarAbci is bidi streaming.
@@ -174,21 +188,27 @@ pub mod scalar_abci_client {
             tonic::Response<tonic::codec::Streaming<super::ScalarAbciResponse>>,
             tonic::Status,
         > {
-            self.inner.ready().await.map_err(|e| {
-                tonic::Status::new(
-                    tonic::Code::Unknown,
-                    format!("Service was not ready: {}", e.into()),
-                )
-            })?;
+            self.inner
+                .ready()
+                .await
+                .map_err(|e| {
+                    tonic::Status::new(
+                        tonic::Code::Unknown,
+                        format!("Service was not ready: {}", e.into()),
+                    )
+                })?;
             let codec = tonic::codec::ProstCodec::default();
             let path = http::uri::PathAndQuery::from_static(
                 "/abci.ScalarAbci/BidirectionalStreamingScalarAbci",
             );
             let mut req = request.into_streaming_request();
-            req.extensions_mut().insert(GrpcMethod::new(
-                "abci.ScalarAbci",
-                "BidirectionalStreamingScalarAbci",
-            ));
+            req.extensions_mut()
+                .insert(
+                    GrpcMethod::new(
+                        "abci.ScalarAbci",
+                        "BidirectionalStreamingScalarAbci",
+                    ),
+                );
             self.inner.streaming(req, path, codec).await
         }
     }
@@ -204,11 +224,15 @@ pub mod scalar_abci_server {
         async fn unary_scalar_abci(
             &self,
             request: tonic::Request<super::ScalarAbciRequest>,
-        ) -> std::result::Result<tonic::Response<super::ScalarAbciResponse>, tonic::Status>;
+        ) -> std::result::Result<
+            tonic::Response<super::ScalarAbciResponse>,
+            tonic::Status,
+        >;
         /// Server streaming response type for the ServerStreamingScalarAbci method.
         type ServerStreamingScalarAbciStream: futures_core::Stream<
                 Item = std::result::Result<super::ScalarAbciResponse, tonic::Status>,
-            > + Send
+            >
+            + Send
             + 'static;
         /// ServerStreamingEcho is server side streaming.
         async fn server_streaming_scalar_abci(
@@ -222,11 +246,15 @@ pub mod scalar_abci_server {
         async fn client_streaming_scalar_abci(
             &self,
             request: tonic::Request<tonic::Streaming<super::ScalarAbciRequest>>,
-        ) -> std::result::Result<tonic::Response<super::ScalarAbciResponse>, tonic::Status>;
+        ) -> std::result::Result<
+            tonic::Response<super::ScalarAbciResponse>,
+            tonic::Status,
+        >;
         /// Server streaming response type for the BidirectionalStreamingScalarAbci method.
         type BidirectionalStreamingScalarAbciStream: futures_core::Stream<
                 Item = std::result::Result<super::ScalarAbciResponse, tonic::Status>,
-            > + Send
+            >
+            + Send
             + 'static;
         /// BidirectionalStreamingScalarAbci is bidi streaming.
         async fn bidirectional_streaming_scalar_abci(
@@ -261,7 +289,10 @@ pub mod scalar_abci_server {
                 max_encoding_message_size: None,
             }
         }
-        pub fn with_interceptor<F>(inner: T, interceptor: F) -> InterceptedService<Self, F>
+        pub fn with_interceptor<F>(
+            inner: T,
+            interceptor: F,
+        ) -> InterceptedService<Self, F>
         where
             F: tonic::service::Interceptor,
         {
@@ -317,17 +348,23 @@ pub mod scalar_abci_server {
                 "/abci.ScalarAbci/UnaryScalarAbci" => {
                     #[allow(non_camel_case_types)]
                     struct UnaryScalarAbciSvc<T: ScalarAbci>(pub Arc<T>);
-                    impl<T: ScalarAbci> tonic::server::UnaryService<super::ScalarAbciRequest>
-                        for UnaryScalarAbciSvc<T>
-                    {
+                    impl<
+                        T: ScalarAbci,
+                    > tonic::server::UnaryService<super::ScalarAbciRequest>
+                    for UnaryScalarAbciSvc<T> {
                         type Response = super::ScalarAbciResponse;
-                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
+                        type Future = BoxFuture<
+                            tonic::Response<Self::Response>,
+                            tonic::Status,
+                        >;
                         fn call(
                             &mut self,
                             request: tonic::Request<super::ScalarAbciRequest>,
                         ) -> Self::Future {
                             let inner = Arc::clone(&self.0);
-                            let fut = async move { (*inner).unary_scalar_abci(request).await };
+                            let fut = async move {
+                                (*inner).unary_scalar_abci(request).await
+                            };
                             Box::pin(fut)
                         }
                     }
@@ -357,21 +394,24 @@ pub mod scalar_abci_server {
                 "/abci.ScalarAbci/ServerStreamingScalarAbci" => {
                     #[allow(non_camel_case_types)]
                     struct ServerStreamingScalarAbciSvc<T: ScalarAbci>(pub Arc<T>);
-                    impl<T: ScalarAbci>
-                        tonic::server::ServerStreamingService<super::ScalarAbciRequest>
-                        for ServerStreamingScalarAbciSvc<T>
-                    {
+                    impl<
+                        T: ScalarAbci,
+                    > tonic::server::ServerStreamingService<super::ScalarAbciRequest>
+                    for ServerStreamingScalarAbciSvc<T> {
                         type Response = super::ScalarAbciResponse;
                         type ResponseStream = T::ServerStreamingScalarAbciStream;
-                        type Future =
-                            BoxFuture<tonic::Response<Self::ResponseStream>, tonic::Status>;
+                        type Future = BoxFuture<
+                            tonic::Response<Self::ResponseStream>,
+                            tonic::Status,
+                        >;
                         fn call(
                             &mut self,
                             request: tonic::Request<super::ScalarAbciRequest>,
                         ) -> Self::Future {
                             let inner = Arc::clone(&self.0);
-                            let fut =
-                                async move { (*inner).server_streaming_scalar_abci(request).await };
+                            let fut = async move {
+                                (*inner).server_streaming_scalar_abci(request).await
+                            };
                             Box::pin(fut)
                         }
                     }
@@ -401,19 +441,25 @@ pub mod scalar_abci_server {
                 "/abci.ScalarAbci/ClientStreamingScalarAbci" => {
                     #[allow(non_camel_case_types)]
                     struct ClientStreamingScalarAbciSvc<T: ScalarAbci>(pub Arc<T>);
-                    impl<T: ScalarAbci>
-                        tonic::server::ClientStreamingService<super::ScalarAbciRequest>
-                        for ClientStreamingScalarAbciSvc<T>
-                    {
+                    impl<
+                        T: ScalarAbci,
+                    > tonic::server::ClientStreamingService<super::ScalarAbciRequest>
+                    for ClientStreamingScalarAbciSvc<T> {
                         type Response = super::ScalarAbciResponse;
-                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
+                        type Future = BoxFuture<
+                            tonic::Response<Self::Response>,
+                            tonic::Status,
+                        >;
                         fn call(
                             &mut self,
-                            request: tonic::Request<tonic::Streaming<super::ScalarAbciRequest>>,
+                            request: tonic::Request<
+                                tonic::Streaming<super::ScalarAbciRequest>,
+                            >,
                         ) -> Self::Future {
                             let inner = Arc::clone(&self.0);
-                            let fut =
-                                async move { (*inner).client_streaming_scalar_abci(request).await };
+                            let fut = async move {
+                                (*inner).client_streaming_scalar_abci(request).await
+                            };
                             Box::pin(fut)
                         }
                     }
@@ -442,17 +488,24 @@ pub mod scalar_abci_server {
                 }
                 "/abci.ScalarAbci/BidirectionalStreamingScalarAbci" => {
                     #[allow(non_camel_case_types)]
-                    struct BidirectionalStreamingScalarAbciSvc<T: ScalarAbci>(pub Arc<T>);
-                    impl<T: ScalarAbci> tonic::server::StreamingService<super::ScalarAbciRequest>
-                        for BidirectionalStreamingScalarAbciSvc<T>
-                    {
+                    struct BidirectionalStreamingScalarAbciSvc<T: ScalarAbci>(
+                        pub Arc<T>,
+                    );
+                    impl<
+                        T: ScalarAbci,
+                    > tonic::server::StreamingService<super::ScalarAbciRequest>
+                    for BidirectionalStreamingScalarAbciSvc<T> {
                         type Response = super::ScalarAbciResponse;
                         type ResponseStream = T::BidirectionalStreamingScalarAbciStream;
-                        type Future =
-                            BoxFuture<tonic::Response<Self::ResponseStream>, tonic::Status>;
+                        type Future = BoxFuture<
+                            tonic::Response<Self::ResponseStream>,
+                            tonic::Status,
+                        >;
                         fn call(
                             &mut self,
-                            request: tonic::Request<tonic::Streaming<super::ScalarAbciRequest>>,
+                            request: tonic::Request<
+                                tonic::Streaming<super::ScalarAbciRequest>,
+                            >,
                         ) -> Self::Future {
                             let inner = Arc::clone(&self.0);
                             let fut = async move {
@@ -484,14 +537,18 @@ pub mod scalar_abci_server {
                     };
                     Box::pin(fut)
                 }
-                _ => Box::pin(async move {
-                    Ok(http::Response::builder()
-                        .status(200)
-                        .header("grpc-status", "12")
-                        .header("content-type", "application/grpc")
-                        .body(empty_body())
-                        .unwrap())
-                }),
+                _ => {
+                    Box::pin(async move {
+                        Ok(
+                            http::Response::builder()
+                                .status(200)
+                                .header("grpc-status", "12")
+                                .header("content-type", "application/grpc")
+                                .body(empty_body())
+                                .unwrap(),
+                        )
+                    })
+                }
             }
         }
     }

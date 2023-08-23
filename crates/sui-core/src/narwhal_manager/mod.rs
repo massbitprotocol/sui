@@ -15,7 +15,9 @@ use narwhal_node::worker_node::WorkerNodes;
 use narwhal_node::{CertificateStoreCacheMetrics, NodeStorage};
 use narwhal_worker::TransactionValidator;
 use prometheus::{register_int_gauge_with_registry, IntGauge, Registry};
+use scalar_chain_ethereum::EvmRelayer;
 use scalar_rpc::GrpcNode;
+use scalar_tss::TssNode;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Instant;
@@ -81,8 +83,10 @@ pub struct NarwhalManager {
     network_keypair: NetworkKeyPair,
     worker_ids_and_keypairs: Vec<(WorkerId, NetworkKeyPair)>,
     primary_node: PrimaryNode,
-    grpc_node: GrpcNode,
     worker_nodes: WorkerNodes,
+    grpc_node: GrpcNode,
+    tss_party: TssNode,
+    evm_relayer: EvmRelayer,
     storage_base_path: PathBuf,
     running: Mutex<Running>,
     metrics: NarwhalManagerMetrics,
@@ -102,6 +106,16 @@ impl NarwhalManager {
             true,
             config.registry_service.clone(),
         );
+        let tss_party = TssNode::new(
+            config.parameters.clone(),
+            true,
+            config.registry_service.clone(),
+        );
+        let evm_relayer = EvmRelayer::new(
+            config.parameters.clone(),
+            true,
+            config.registry_service.clone(),
+        );
         // Create Narwhal Workers with configuration
         let worker_nodes =
             WorkerNodes::new(config.registry_service.clone(), config.parameters.clone());
@@ -111,8 +125,10 @@ impl NarwhalManager {
 
         Self {
             primary_node,
-            grpc_node,
             worker_nodes,
+            grpc_node,
+            tss_party,
+            evm_relayer,
             primary_keypair: config.primary_keypair,
             network_keypair: config.network_keypair,
             worker_ids_and_keypairs: config.worker_ids_and_keypairs,
@@ -194,6 +210,66 @@ impl NarwhalManager {
                         panic!("Unable to start Narwhal Primary: {:?}", e);
                     }
                     tracing::error!("Unable to start Narwhal Primary: {:?}, retrying", e);
+                    tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
+                }
+            }
+        }
+        // Start Tss node
+        const MAX_TSSNODE_RETRIES: u32 = 2;
+        let mut tss_retries = 0;
+        loop {
+            //Todo: Update to new Epoch
+            match self
+                .tss_party
+                .start(
+                    self.primary_keypair.copy(),
+                    self.network_keypair.copy(),
+                    committee.clone(),
+                    protocol_config.clone(),
+                    worker_cache.clone(),
+                    execution_state.clone(),
+                )
+                .await
+            {
+                Ok(_) => {
+                    break;
+                }
+                Err(e) => {
+                    tss_retries += 1;
+                    if tss_retries >= MAX_TSSNODE_RETRIES {
+                        panic!("Unable to start TSS party: {:?}", e);
+                    }
+                    tracing::error!("Unable to start Narwhal TSS party: {:?}, retrying", e);
+                    tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
+                }
+            }
+        }
+        // Start Evm Relayer
+        const MAX_RELAYER_RETRIES: u32 = 2;
+        let mut relayer_retries = 0;
+        loop {
+            //Todo: Update to new Epoch
+            match self
+                .evm_relayer
+                .start(
+                    self.primary_keypair.copy(),
+                    self.network_keypair.copy(),
+                    committee.clone(),
+                    protocol_config.clone(),
+                    worker_cache.clone(),
+                    execution_state.clone(),
+                )
+                .await
+            {
+                Ok(_) => {
+                    break;
+                }
+                Err(e) => {
+                    relayer_retries += 1;
+                    if relayer_retries >= MAX_RELAYER_RETRIES {
+                        panic!("Unable to start Relayer Process: {:?}", e);
+                    }
+                    tracing::error!("Unable to start Relayer Process: {:?}, retrying", e);
                     tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
                 }
             }

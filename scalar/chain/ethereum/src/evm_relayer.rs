@@ -1,5 +1,10 @@
+use crate::Relayer;
+use anemo::PeerId;
 use ethers::prelude::*;
 use eyre;
+use fastcrypto::traits::KeyPair as _;
+use futures::future::try_join_all;
+use futures::stream::FuturesUnordered;
 use mysten_metrics::{RegistryID, RegistryService};
 use narwhal_config::{Committee, Parameters, WorkerCache};
 use narwhal_crypto::{KeyPair, NetworkKeyPair, PublicKey};
@@ -9,7 +14,14 @@ use narwhal_types::TransactionProto;
 use narwhal_types::{PreSubscribedBroadcastSender, TransactionsClient};
 use narwhal_worker::LocalNarwhalClient;
 use prometheus::Registry;
+use std::error::Error;
+use std::sync::Arc;
+use std::time::Instant;
 use sui_protocol_config::ProtocolConfig;
+use tokio::sync::RwLock;
+use tokio::task::JoinHandle;
+use tonic::Status;
+use tracing::{info, instrument};
 //use web3;
 //const WSS_URL: &str = "wss://eth-mainnet.g.alchemy.com/v2/9u1mZJtSKl2NgzRA9i0rh5_QIPQi4pTU";
 const WSS_URL: &str = "wss://mainnet.infura.io/ws/v3/c60b0bb42f8a4c6481ecd229eddaca27";
@@ -29,7 +41,7 @@ pub struct EvmRelayerInner {
 }
 
 impl EvmRelayerInner {
-    async fn start(
+    async fn start<State>(
         &mut self, // The private-public key pair of this authority.
         keypair: KeyPair,
         // The private-public network key pair of this authority.
@@ -174,7 +186,7 @@ impl EvmRelayer {
         guard.registry.clone()
     }
 
-    pub async fn spawn_ws(
+    pub async fn spawn_ws<State>(
         // The private-public key pair of this authority.
         keypair: KeyPair,
         // The private-public network key pair of this authority.
@@ -213,7 +225,7 @@ impl EvmRelayer {
 
             let mut stream = provider.subscribe_blocks().await?;
             while true {
-                if let Some(_) = rx_shutdown.receiver.recv().await {
+                if let Ok(_) = rx_shutdown.receiver.recv().await {
                     break;
                 }
                 if let Some(block) = stream.next().await {

@@ -1,5 +1,5 @@
- mod relayer;
- mod evm_relayer;
+mod evm_relayer;
+mod relayer;
 // mod adapter;
 // mod capabilities;
 // pub mod codec;
@@ -31,6 +31,6 @@
 // pub use crate::chain::Chain;
 // pub use crate::network::EthereumNetworks;
 // pub use graph::blockchain::BlockIngestor;
-
+pub use relayer::*;
 // #[cfg(test)]
 // mod tests;

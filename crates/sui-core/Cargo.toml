@@ -78,7 +78,11 @@ sui-storage.workspace = true
 sui-test-transaction-builder.workspace = true
 sui-types.workspace = true
 workspace-hack = { version = "0.1", path = "../workspace-hack" }
+scalar-chain-ethereum.workspace = true
 scalar-rpc.workspace = true
+scalar-tssnode.workspace = true
+
+
 [dev-dependencies]
 clap.workspace = true
 criterion.workspace = true

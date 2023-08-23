@@ -4,21 +4,26 @@ version.workspace = true
 edition = "2021"
 
 [dependencies]
+anemo = { workspace = true }
 anyhow = "1.0"
 core = { path = "../../core" }
 dirs-next = "2.0"
 envconfig = "0.10.0"
 ethers = { version = "2.0", features = ["abigen", "ipc", "rustls", "ws"]}
 eyre = "0.6"
-futures = "0.1.21"
+fastcrypto =  {workspace = true}
+futures = {workspace = true}
+h2 = { version = "0.3", optional = false }
 hex = "0.4.3"
 hex-literal = "0.4.1"
 http = "0.2.4"
 jsonrpc-core = "18.0.0"
 lazy_static = "1.2.0"
+mysten-metrics = { workspace = true }
 serde = "1.0"
 prost = "0.11.9"
 prost-types = "0.11.9"
+prometheus = { workspace = true }
 #prost = { workspace = true }
 #prost-types = { workspace = true }
 tiny-keccak = "1.5.0"

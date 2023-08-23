@@ -1,0 +1,30 @@
+[package]
+name = "scalar-tssnode"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+log = "0.4"
+anemo = { workspace = true }
+anyhow = { workspace = true }
+eyre.workspace = true
+fastcrypto.workspace = true
+futures.workspace = true
+mysten-metrics.workspace = true
+narwhal-config.workspace = true
+narwhal-crypto.workspace = true
+narwhal-executor.workspace = true
+narwhal-network.workspace = true
+narwhal-node.workspace = true
+narwhal-storage.workspace = true
+narwhal-types.workspace = true
+narwhal-worker.workspace = true
+
+prometheus.workspace = true
+sui-keys.workspace = true
+sui-types.workspace = true
+sui-protocol-config.workspace = true
+
+
+tokio.workspace = true
+tracing.workspace = true
