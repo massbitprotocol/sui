@@ -13,6 +13,6 @@ echo "build date: \t$BUILD_DATE"
 echo "git revision: \t$GIT_REVISION"
 echo
 
-cargo build --manifest-path ${DIR}/Cargo.toml --profile $PROFILE --bin sui-test-validator --bin sui
+cargo build --manifest-path ${DIR}/Cargo.toml --profile $PROFILE --bin sui-test-validator --bin sui #--target aarch64-apple-darwin
 # COPY /sui/target/release/sui-test-validator /usr/local/bin
 # COPY /sui/target/release/sui /usr/local/bin

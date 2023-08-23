@@ -4,11 +4,11 @@ pub mod components;
 pub mod data;
 pub mod endpoint;
 pub mod env;
-pub mod firehose;
+//pub mod firehose;
 pub mod log;
 pub mod metrics;
-pub mod substreams;
-pub mod substreams_rpc;
+//pub mod substreams;
+//pub mod substreams_rpc;
 pub mod util;
 pub mod prelude {
     pub use crate::components::metrics::MetricsRegistry;
