@@ -49,6 +49,7 @@ services:
     # populate your local ./fullnode/config/ directory with fullnode.yaml and genesis.blob for the network you want to use.
     volumes:
       - ./validator:/opt/sui
+      - ./validator/config:/scalar/config
       # - ./validator/debug/sui-test-validator:/usr/local/bin/sui-test-validator
       # - ./validator/debug/sui:/usr/local/bin/sui
       - ./validator/nginx.conf:/etc/nginx/sites-available/default
@@ -57,6 +58,10 @@ services:
       - 9184:8184
       - 9123:8123
       - 9124:8124
+      - 50011:50011
+      - 50012:50012
+      - 50013:50013
+      - 50014:50014
       - 50050:50050
       - 50051:50051
       - 50052:50052

@@ -31,6 +31,9 @@ mod relayer;
 // pub use crate::chain::Chain;
 // pub use crate::network::EthereumNetworks;
 // pub use graph::blockchain::BlockIngestor;
+pub use evm_relayer::*;
 pub use relayer::*;
+pub const NAMESPACE: &str = "scalar";
+pub const NUM_SHUTDOWN_RECEIVERS: u64 = 8;
 // #[cfg(test)]
 // mod tests;

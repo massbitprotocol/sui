@@ -22,7 +22,6 @@ use tracing::{debug, error, info, instrument, warn};
 
 pub type NodeId = u32;
 pub struct TssNodeInner {
-    protocol_config: ProtocolConfig,
     // The configuration parameters.
     parameters: Parameters,
     // A prometheus RegistryService to use for the metrics
@@ -42,8 +41,8 @@ impl TssNodeInner {
     #[instrument(level = "info", skip_all)]
     async fn start(
         &mut self,
-        // The primary's id
-        primary_name: PublicKey,
+        // The private-public key pair of this authority.
+        keypair: KeyPair,
         // The private-public network key pair of this authority.
         network_keypair: NetworkKeyPair,
         // The committee information.
@@ -144,13 +143,8 @@ pub struct TssNode {
 }
 
 impl TssNode {
-    pub fn new(
-        protocol_config: ProtocolConfig,
-        parameters: Parameters,
-        registry_service: RegistryService,
-    ) -> TssNode {
+    pub fn new(parameters: Parameters, registry_service: RegistryService) -> TssNode {
         let inner = TssNodeInner {
-            protocol_config,
             parameters,
             registry_service,
             registry: None,
@@ -166,8 +160,8 @@ impl TssNode {
 
     pub async fn start(
         &self,
-        // The primary's public key of this authority.
-        primary_key: PublicKey,
+        // The private-public key pair of this authority.
+        keypair: KeyPair,
         // The private-public network key pair of this authority.
         network_keypair: NetworkKeyPair,
         // The committee information.
@@ -178,21 +172,15 @@ impl TssNode {
         client: NetworkClient,
         // The node's store
         // TODO: replace this by a path so the method can open and independent storage
-        store: &NodeStorage,
+        // store: &NodeStorage,
         // The transaction validator defining Tx acceptance,
-        tx_validator: impl TransactionValidator,
+        //tx_validator: impl TransactionValidator,
         // An optional metrics struct
-        metrics: Option<Metrics>,
+        //metrics: Option<Metrics>,
     ) -> Result<(), NodeError> {
         let mut guard = self.internal.write().await;
         guard
-            .start(
-                primary_key,
-                network_keypair,
-                committee,
-                worker_cache,
-                client,
-            )
+            .start(keypair, network_keypair, committee, worker_cache, client)
             .await
     }
 

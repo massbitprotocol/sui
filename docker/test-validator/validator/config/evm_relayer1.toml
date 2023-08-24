@@ -1,0 +1,11 @@
+[[scalar_relayer_evm]]
+name = "Ethereum"
+rpc_addr = ""
+ws_addr = "wss://mainnet.infura.io/ws/v3/c60b0bb42f8a4c6481ecd229eddaca27"
+start_with_bridge = true
+
+[[scalar_relayer_evm]]
+name = "Avalanche"
+rpc_addr = ""
+ws_addr = "wss://mainnet.infura.io/ws/v3/c60b0bb42f8a4c6481ecd229eddaca27"
+start_with_bridge = false

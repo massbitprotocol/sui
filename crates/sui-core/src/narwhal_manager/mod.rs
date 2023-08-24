@@ -17,13 +17,14 @@ use narwhal_worker::TransactionValidator;
 use prometheus::{register_int_gauge_with_registry, IntGauge, Registry};
 use scalar_chain_ethereum::EvmRelayer;
 use scalar_rpc::GrpcNode;
-use scalar_tss::TssNode;
+use scalar_tssnode::TssNode;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Instant;
 use sui_protocol_config::{ProtocolConfig, ProtocolVersion};
 use sui_types::crypto::{AuthorityKeyPair, NetworkKeyPair};
 use tokio::sync::Mutex;
+use tracing::info;
 #[derive(PartialEq)]
 enum Running {
     True(Epoch, ProtocolVersion),
@@ -106,16 +107,9 @@ impl NarwhalManager {
             true,
             config.registry_service.clone(),
         );
-        let tss_party = TssNode::new(
-            config.parameters.clone(),
-            true,
-            config.registry_service.clone(),
-        );
-        let evm_relayer = EvmRelayer::new(
-            config.parameters.clone(),
-            true,
-            config.registry_service.clone(),
-        );
+        let tss_party = TssNode::new(config.parameters.clone(), config.registry_service.clone());
+        let evm_relayer =
+            EvmRelayer::new(config.parameters.clone(), config.registry_service.clone());
         // Create Narwhal Workers with configuration
         let worker_nodes =
             WorkerNodes::new(config.registry_service.clone(), config.parameters.clone());
@@ -214,36 +208,6 @@ impl NarwhalManager {
                 }
             }
         }
-        // Start Tss node
-        const MAX_TSSNODE_RETRIES: u32 = 2;
-        let mut tss_retries = 0;
-        loop {
-            //Todo: Update to new Epoch
-            match self
-                .tss_party
-                .start(
-                    self.primary_keypair.copy(),
-                    self.network_keypair.copy(),
-                    committee.clone(),
-                    protocol_config.clone(),
-                    worker_cache.clone(),
-                    execution_state.clone(),
-                )
-                .await
-            {
-                Ok(_) => {
-                    break;
-                }
-                Err(e) => {
-                    tss_retries += 1;
-                    if tss_retries >= MAX_TSSNODE_RETRIES {
-                        panic!("Unable to start TSS party: {:?}", e);
-                    }
-                    tracing::error!("Unable to start Narwhal TSS party: {:?}, retrying", e);
-                    tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
-                }
-            }
-        }
         // Start Evm Relayer
         const MAX_RELAYER_RETRIES: u32 = 2;
         let mut relayer_retries = 0;
@@ -255,7 +219,6 @@ impl NarwhalManager {
                     self.primary_keypair.copy(),
                     self.network_keypair.copy(),
                     committee.clone(),
-                    protocol_config.clone(),
                     worker_cache.clone(),
                     execution_state.clone(),
                 )
@@ -274,6 +237,37 @@ impl NarwhalManager {
                 }
             }
         }
+
+        // Start Tss node
+        // const MAX_TSSNODE_RETRIES: u32 = 2;
+        // let mut tss_retries = 0;
+        // loop {
+        //     //Todo: Update to new Epoch
+        //     match self
+        //         .tss_party
+        //         .start(
+        //             self.primary_keypair.copy(),
+        //             self.network_keypair.copy(),
+        //             committee.clone(),
+        //             worker_cache.clone(),
+        //             execution_state.clone(),
+        //         )
+        //         .await
+        //     {
+        //         Ok(_) => {
+        //             break;
+        //         }
+        //         Err(e) => {
+        //             tss_retries += 1;
+        //             if tss_retries >= MAX_TSSNODE_RETRIES {
+        //                 panic!("Unable to start TSS party: {:?}", e);
+        //             }
+        //             tracing::error!("Unable to start Narwhal TSS party: {:?}, retrying", e);
+        //             tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
+        //         }
+        //     }
+        // }
+
         // Start Narwhal Grpc Server
         const MAX_GRPCSERVER_RETRIES: u32 = 2;
         let mut grpc_retries = 0;
