@@ -8,6 +8,7 @@ use eyre;
 use fastcrypto::traits::KeyPair as _;
 use futures::future::try_join_all;
 use futures::stream::FuturesUnordered;
+use futures::Stream;
 use mysten_metrics::{RegistryID, RegistryService};
 use narwhal_config::{Committee, Parameters, WorkerCache};
 use narwhal_crypto::{KeyPair, NetworkKeyPair, PublicKey};
@@ -227,8 +228,6 @@ impl EvmRelayerInner {
                                     //Broadcast a poll
                                     //Send it to the worker for create poll
                                     info!("Received evm block {:?}", &block.hash);
-                                } else {
-                                    info!("Received Nothing");
                                 }
                             }
                         }

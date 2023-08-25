@@ -1,0 +1,43 @@
+[workspace]
+[package]
+name = "scalar-relayer"
+version = "0.1.0"
+authors = ["Vu Viet Tai <tai@codelight.co>"]
+description = "Relayer for listening events from external chains."
+edition = "2021"
+license = "MIT OR Apache-2.0"
+publish = false
+
+[dependencies]
+anyhow = "1.0.75"
+async-stream = "0.3.5"
+atty = {version = "0.2", default-features = false}
+# config
+clap = {version = "4.4.0", default-features = false, features = ["std", "cargo", "env", "derive"]}
+ethers = { version = "2.0", features = ["abigen", "ipc", "rustls", "ws"]}
+futures= { version = "0.3"}
+
+# logging
+log = {version = "0.4",default-features = false }
+tracing = {version = "0.1", default-features = false}
+tracing-appender = "0.2.2"
+tracing-subscriber= {version = "0.3", features = ["json", "env-filter"]}
+prost = "0.11.8"
+prost-build = "0.11.8"
+protobuf = {version="2.28", features=["with-bytes"]}
+protobuf-src = "1.1.0"
+serde = "1.0"
+serde_json= "1.0.105"
+tokio = { version = "1.0", features = ["rt-multi-thread", "macros"] }
+tokio-stream = { version = "0.1.14" }
+toml = "0.7.4"
+tonic = { version = "0.9.2", features = ["transport", "tls"] }
+tonic-build = { version = "0.9.2", features = [ "prost", "transport" ] }
+tonic-health = "0.9.2"
+tonic-web = { version = "0.9", optional = true }
+tonic-reflection = { version = "0.9", optional = true }
+tonic-types = { version = "0.9", optional = true }
+
+
+[build-dependencies]
+tonic-build = "0.9.2"

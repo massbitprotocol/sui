@@ -209,34 +209,34 @@ impl NarwhalManager {
             }
         }
         // Start Evm Relayer
-        const MAX_RELAYER_RETRIES: u32 = 2;
-        let mut relayer_retries = 0;
-        loop {
-            //Todo: Update to new Epoch
-            match self
-                .evm_relayer
-                .start(
-                    self.primary_keypair.copy(),
-                    self.network_keypair.copy(),
-                    committee.clone(),
-                    worker_cache.clone(),
-                    execution_state.clone(),
-                )
-                .await
-            {
-                Ok(_) => {
-                    break;
-                }
-                Err(e) => {
-                    relayer_retries += 1;
-                    if relayer_retries >= MAX_RELAYER_RETRIES {
-                        panic!("Unable to start Relayer Process: {:?}", e);
-                    }
-                    tracing::error!("Unable to start Relayer Process: {:?}, retrying", e);
-                    tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
-                }
-            }
-        }
+        // const MAX_RELAYER_RETRIES: u32 = 2;
+        // let mut relayer_retries = 0;
+        // loop {
+        //     //Todo: Update to new Epoch
+        //     match self
+        //         .evm_relayer
+        //         .start(
+        //             self.primary_keypair.copy(),
+        //             self.network_keypair.copy(),
+        //             committee.clone(),
+        //             worker_cache.clone(),
+        //             execution_state.clone(),
+        //         )
+        //         .await
+        //     {
+        //         Ok(_) => {
+        //             break;
+        //         }
+        //         Err(e) => {
+        //             relayer_retries += 1;
+        //             if relayer_retries >= MAX_RELAYER_RETRIES {
+        //                 panic!("Unable to start Relayer Process: {:?}", e);
+        //             }
+        //             tracing::error!("Unable to start Relayer Process: {:?}, retrying", e);
+        //             tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
+        //         }
+        //     }
+        // }
 
         // Start Tss node
         // const MAX_TSSNODE_RETRIES: u32 = 2;
