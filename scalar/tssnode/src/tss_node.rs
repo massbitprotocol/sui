@@ -63,7 +63,7 @@ impl TssNodeInner {
         // create the channel to send the shutdown signal
         let mut tx_shutdown = PreSubscribedBroadcastSender::new(NUM_SHUTDOWN_RECEIVERS);
 
-        let handles = TssNodeInner::spawn().await?;
+        let handles = TssNodeInner::spawn(client).await?;
         // store the registry
         self.swap_registry(registry);
         // now keep the handlers
@@ -130,7 +130,10 @@ impl TssNodeInner {
             self.registry = None
         }
     }
-    async fn spawn() -> SubscriberResult<Vec<JoinHandle<()>>> {
+    async fn spawn(
+        // Client for communications.
+        client: NetworkClient,
+    ) -> SubscriberResult<Vec<JoinHandle<()>>> {
         let mut handles = Vec::new();
         let handle = tokio::spawn(async move {});
         handles.push(handle);

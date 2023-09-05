@@ -3,21 +3,25 @@
 # SPDX-License-Identifier: Apache-2.0
 
 unset LD_PRELOAD
-service nginx start
+#service nginx start
 TSS_PORT=50010
 GRPC_PORT=50050
 TOFND=.tofnd
 CONFIG_DIR=/scalar/config
 
+tss() {
+    PORT=$TSS_PORT
+    rm -rf tss/$TOFND
+    /usr/local/bin/scalar-tofnd --no-password -d "tss/$TOFND" -p ${PORT} -m create
+    echo "Inited tofnd at dir tss/$TOFND and port $PORT"
+    rm tss/$TOFND/export
+    echo "Running tofnd at dir tss/$TOFND and port $PORT as daemon"
+    /usr/local/bin/scalar-tofnd --no-password -d "tss/$TOFND" -p ${PORT} -m existing
+    echo "Finished tofnd at dir tss/$TOFND and port $PORT"
+}
+
 validator() {
     # /usr/local/bin/sui-test-validator --config-path /opt/sui/config/validator.yaml
-    # for i in {0..3}; do
-    #     PORT=$(($TSS_PORT+$i))
-    #     rm -rf tss/$TOFND$i
-    #     /usr/local/bin/scalar-tofnd --no-password -d "tss/$TOFND$i" -m create -p ${PORT}
-    #     echo "Inited tofnd instance $i at dir tss/$TOFND$i and port $PORT"
-    # done
-
     /usr/local/bin/sui-test-validator \
         --epoch-duration-ms 60000 \
         --fullnode-rpc-port 9000 \

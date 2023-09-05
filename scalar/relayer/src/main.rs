@@ -21,7 +21,7 @@ async fn main() -> Result<(), anyhow::Error> {
     let mut all_handlers = vec![];
     for i in 0..args.instance {
         let config = format!("{}/evm_relayer{}.toml", args.config.as_str(), i);
-        let grpc_addr = format!("{}/{}", &args.grpc_host, args.grpc_port + i);
+        let grpc_addr = format!("{}:{}", &args.grpc_host, args.grpc_port + i);
         info!("Start relayer with Rpc address {:?}", grpc_addr.as_str());
         println!("Start relayer with Rpc address {:?}", grpc_addr.as_str());
         if let Ok(handlers) = start_relayer(config, grpc_addr).await {

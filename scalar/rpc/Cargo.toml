@@ -10,6 +10,7 @@ edition = "2021"
 [dependencies]
 # Common dependencies
 anemo.workspace = true
+anyhow = "1.0"
 arc-swap.workspace = true
 bytes.workspace = true
 fastcrypto.workspace = true
@@ -19,6 +20,7 @@ mysten-network.workspace = true
 narwhal-config.workspace = true
 narwhal-crypto.workspace = true
 narwhal-executor.workspace = true
+narwhal-network.workspace = true
 narwhal-node.workspace = true
 narwhal-types.workspace = true
 narwhal-worker.workspace = true
@@ -68,7 +70,3 @@ path="examples/rpc-server.rs"
 [[example]]
 name="abci-client"
 path="examples/abci-client.rs"
-
-[[example]]
-name="abci-server"
-path="examples/abci-server.rs"

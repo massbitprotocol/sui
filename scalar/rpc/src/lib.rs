@@ -1,6 +1,11 @@
 pub mod grpc_node;
 pub mod proto;
+pub mod tests;
+pub mod tss;
+pub mod tss_network;
 pub use grpc_node::*;
 pub use proto::*;
+pub use tss::*;
+pub use tss_network::*;
 pub const NAMESPACE: &str = "scalar";
 pub const NUM_SHUTDOWN_RECEIVERS: u64 = 8;

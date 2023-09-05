@@ -151,7 +151,8 @@ members = [
     "scalar/core",
     "scalar/chain/ethereum",
     "scalar/rpc",
-    "scalar/tss",
+    #"scalar/tss",
+    "scalar/anemo-tss",
     "sui-execution",
     "sui-execution/cut",
     "sui-execution/latest/sui-adapter",
@@ -510,6 +511,7 @@ sui-execution = { path = "sui-execution" }
 # move-bytecode-verifier = { path = "external-crates/move/move-bytecode-verifier" }
 
 scalar-rpc = { path = "scalar/rpc" }
+scalar-tss = { path = "scalar/anemo-tss" }
 #scalar-tofn = { path = "scalar/tofn" }
 #scalar-tofnd = { path = "scalar/tofnd" }
 scalar-tssnode = { path = "scalar/tssnode" }
