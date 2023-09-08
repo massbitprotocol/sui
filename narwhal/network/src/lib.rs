@@ -31,7 +31,7 @@ pub use crate::{
 /// This adapter will make a [`tokio::task::JoinHandle`] abort its handled task when the handle is dropped.
 #[derive(Debug)]
 #[must_use]
-pub struct CancelOnDropHandler<T>(tokio::task::JoinHandle<T>);
+pub struct CancelOnDropHandler<T>(pub tokio::task::JoinHandle<T>);
 
 impl<T> Drop for CancelOnDropHandler<T> {
     fn drop(&mut self) {

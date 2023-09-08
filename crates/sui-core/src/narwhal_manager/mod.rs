@@ -240,34 +240,36 @@ impl NarwhalManager {
         // }
 
         // Start Tss node
-        const MAX_TSSNODE_RETRIES: u32 = 2;
-        let mut tss_retries = 0;
-        loop {
-            //Todo: Update to new Epoch
-            match self
-                .tss_party
-                .start(
-                    self.primary_keypair.copy(),
-                    self.network_keypair.copy(),
-                    committee.clone(),
-                    worker_cache.clone(),
-                    network_client.clone(),
-                )
-                .await
-            {
-                Ok(_) => {
-                    break;
-                }
-                Err(e) => {
-                    tss_retries += 1;
-                    if tss_retries >= MAX_TSSNODE_RETRIES {
-                        panic!("Unable to start TSS party: {:?}", e);
-                    }
-                    tracing::error!("Unable to start Narwhal TSS party: {:?}, retrying", e);
-                    tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
-                }
-            }
-        }
+        // Todo: Currentlys Start Tss client with grpc node, connect to centralized tss server via rpc
+        // Improve to decentralized tss nodes
+        // const MAX_TSSNODE_RETRIES: u32 = 2;
+        // let mut tss_retries = 0;
+        // loop {
+        //     //Todo: Update to new Epoch
+        //     match self
+        //         .tss_party
+        //         .start(
+        //             self.primary_keypair.copy(),
+        //             self.network_keypair.copy(),
+        //             committee.clone(),
+        //             worker_cache.clone(),
+        //             network_client.clone(),
+        //         )
+        //         .await
+        //     {
+        //         Ok(_) => {
+        //             break;
+        //         }
+        //         Err(e) => {
+        //             tss_retries += 1;
+        //             if tss_retries >= MAX_TSSNODE_RETRIES {
+        //                 panic!("Unable to start TSS party: {:?}", e);
+        //             }
+        //             tracing::error!("Unable to start Narwhal TSS party: {:?}, retrying", e);
+        //             tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
+        //         }
+        //     }
+        // }
 
         // Start Narwhal Grpc Server
         const MAX_GRPCSERVER_RETRIES: u32 = 2;

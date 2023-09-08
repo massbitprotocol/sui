@@ -3,22 +3,30 @@ use crate::{
     message_out::{self, KeygenResult, SignResult},
     AnemoDeliverer, KeyPresenceRequest, KeygenInit, MessageIn, MessageOut, SignInit, TrafficIn,
 };
-use anemo::PeerId;
+use crate::{TssAnemoKeygenRequest, TssPeerClient, TssPeerServer, TssPeerService};
+use anemo::{types::PeerInfo, Network, PeerId};
+use anemo_tower::trace::TraceLayer;
 use fastcrypto::traits::{KeyPair as _, VerifyingKey};
 use narwhal_config::Committee;
 use narwhal_crypto::{KeyPair, NetworkKeyPair, PublicKey};
+use narwhal_types::PreSubscribedBroadcastSender;
 use std::{collections::HashMap, sync::Arc};
-use tokio::sync::{mpsc, RwLock};
+use tokio::sync::{
+    mpsc::{self, UnboundedReceiver, UnboundedSender},
+    Notify, RwLock,
+};
 use tokio_stream::wrappers::UnboundedReceiverStream;
 use tonic::Request;
 use tonic::Status;
 use tracing::{error, info, warn};
+
 type GrpcKeygenResult = Result<KeygenResult, Status>;
 type GrpcSignResult = Result<SignResult, Status>;
 
 pub type Deliverer = AnemoDeliverer;
 pub struct TssParty {
     pub client: Arc<RwLock<gg20_client::Gg20Client<tonic::transport::Channel>>>,
+    pub deliverer: AnemoDeliverer,
     pub keypair: KeyPair,
     pub committee: Committee,
 }
@@ -30,17 +38,61 @@ impl TssParty {
         // All party uids
         committee: Committee,
     ) -> Self {
-        // let name = keypair.public().clone();
-        // // Figure out the id for this authority
-        // let authority = committee
-        //     .authority_by_key(&name)
-        //     .unwrap_or_else(|| panic!("Our node with key {:?} should be in committee", name));
-        // let party_uid = PeerId(authority.network_key().0.to_bytes()).to_string();
+        let name = keypair.public().clone();
+        // Figure out the id for this authority
+        let authority: &narwhal_config::Authority = committee
+            .authority_by_key(&name)
+            .unwrap_or_else(|| panic!("Our node with key {:?} should be in committee", name));
+        let party_id = Self::create_tss_peer_id(authority);
+        //Todo: TssAnemoNetwork
+        let addr = Self::create_peer_addr(authority);
+        info!("Create AnemoTss network at {:?}", &addr);
+        let network = Network::bind(addr)
+            .private_key(party_id.0.clone())
+            .server_name("AnemoTss")
+            .outbound_request_layer(TraceLayer::new_for_client_and_server_errors())
+            .start(TssPeerServer::new(TssPeerService::default()))
+            .unwrap();
+        committee
+            .authorities()
+            .filter(|auth| auth.id().0 != authority.id().0)
+            .for_each(|auth| {
+                let peer_addr = Self::create_peer_addr(auth);
+                let peer_info = PeerInfo {
+                    peer_id: Self::create_tss_peer_id(auth),
+                    affinity: anemo::types::PeerAffinity::High,
+                    address: vec![peer_addr.into()],
+                };
+                info!("AnemoTss add known peers {:?}", peer_info);
+                network.known_peers().insert(peer_info);
+            });
+        let peer_names = committee
+            .authorities()
+            .filter(|auth| auth.id().0 != authority.id().0)
+            .map(|auth| auth.tss_key().clone())
+            .collect();
+        let deliverer = AnemoDeliverer::new(network, peer_names);
         Self {
             client: Arc::new(RwLock::new(client)),
+            deliverer,
             keypair,
             committee,
         }
+    }
+    pub fn create_peer_addr(authority: &narwhal_config::Authority) -> String {
+        format!("127.0.0.1:{}", 50020 + authority.id().0)
+    }
+    pub fn create_tss_peer_id(authority: &narwhal_config::Authority) -> PeerId {
+        PeerId(authority.tss_key().0.to_bytes())
+    }
+    pub fn get_uid(&self) -> String {
+        let name = self.keypair.public().clone();
+        // Figure out the id for this authority
+        let authority = self
+            .committee
+            .authority_by_key(&name)
+            .unwrap_or_else(|| panic!("Our node with key {:?} should be in committee", name));
+        PeerId(authority.network_key().0.to_bytes()).to_string()
     }
     pub fn get_client(&self) -> Arc<RwLock<gg20_client::Gg20Client<tonic::transport::Channel>>> {
         self.client.clone()
@@ -52,7 +104,7 @@ impl TssParty {
             .committee
             .authority_by_key(&name)
             .unwrap_or_else(|| panic!("Our node with key {:?} should be in committee", name));
-        0
+        authority.id().0 as u32
     }
     pub fn get_parties(&self) -> Vec<String> {
         let party_uids = self
@@ -62,16 +114,27 @@ impl TssParty {
             .collect::<Vec<String>>();
         party_uids
     }
-    pub fn get_current_epoch(&self) {}
+    pub fn get_current_epoch(&self) -> u64 {
+        self.committee.epoch()
+    }
+    fn create_keygen_init(&self) -> KeygenInit {
+        KeygenInit {
+            new_key_uid: format!("tss_session{}", self.get_current_epoch()),
+            party_uids: self.get_parties(),
+            party_share_counts: vec![1, 1, 1, 1],
+            my_party_index: self.get_index(),
+            threshold: 2,
+        }
+    }
     pub async fn execute_keygen(
         &mut self,
-        init: KeygenInit,
-        channels: SenderReceiver,
-        delivery: Deliverer,
-        notify: std::sync::Arc<tokio::sync::Notify>,
+        mut rx_shutdown: narwhal_types::ConditionalBroadcastReceiver,
     ) -> GrpcKeygenResult {
-        let my_uid = init.party_uids[usize::try_from(init.my_party_index).unwrap()].clone();
-        let (keygen_server_incoming, rx) = channels;
+        let keygen_init = self.create_keygen_init();
+        info!("Keygen init {:?}", &keygen_init);
+        let my_uid =
+            keygen_init.party_uids[usize::try_from(keygen_init.my_party_index).unwrap()].clone();
+        let (keygen_server_incoming, rx) = self.get_channels();
         let mut keygen_server_outgoing = self
             .client
             .write()
@@ -83,86 +146,92 @@ impl TssParty {
 
         #[allow(unused_variables)]
         let all_share_count = {
-            if init.party_share_counts.is_empty() {
-                init.party_uids.len()
+            if keygen_init.party_share_counts.is_empty() {
+                keygen_init.party_uids.len()
             } else {
-                init.party_share_counts.iter().sum::<u32>() as usize
+                keygen_init.party_share_counts.iter().sum::<u32>() as usize
             }
         };
         #[allow(unused_variables)]
         let my_share_count = {
-            if init.party_share_counts.is_empty() {
+            if keygen_init.party_share_counts.is_empty() {
                 1
             } else {
-                init.party_share_counts[init.my_party_index as usize] as usize
+                keygen_init.party_share_counts[keygen_init.my_party_index as usize] as usize
             }
         };
         // the first outbound message is keygen init info
         keygen_server_incoming
             .send(MessageIn {
-                data: Some(message_in::Data::KeygenInit(init)),
+                data: Some(message_in::Data::KeygenInit(keygen_init)),
             })
             .unwrap();
-
+        info!("Sent keygen_init message");
         // block until all parties send their KeygenInit
-        notify.notified().await;
-        notify.notify_one();
+        // let notify = self.get_notifier();
+        // notify.notified().await;
+        // notify.notify_one();
 
         #[allow(unused_variables)]
         let mut msg_count = 1;
 
         let result = loop {
-            let msg = match keygen_server_outgoing.message().await {
-                Ok(msg) => match msg {
-                    Some(msg) => msg,
-                    None => {
-                        warn!(
-                            "party [{}] keygen execution was not completed due to abort",
-                            my_uid
-                        );
-                        return Ok(KeygenResult::default());
-                    }
+            tokio::select! {
+                _ = rx_shutdown.receiver.recv() => {
+                    return Err(Status::cancelled("Node is shuting down"));
                 },
-                Err(status) => {
-                    warn!(
-                        "party [{}] keygen execution was not completed due to connection error: {}",
-                        my_uid, status
-                    );
-                    return Err(status);
-                }
-            };
+                res =  keygen_server_outgoing.message() => {
+                    match res {
+                        Ok(Some(msg)) => {
+                            let msg_type = msg.data.as_ref().expect("missing data");
+                            match msg_type {
+                                #[allow(unused_variables)] // allow unsused traffin in non malicious
+                                message_out::Data::Traffic(traffic) => {
+                                    // in malicous case, if we are stallers we skip the message
+                                    #[cfg(feature = "malicious")]
+                                    {
+                                        let round = keygen_round(msg_count, all_share_count, my_share_count);
+                                        if self.malicious_data.timeout_round == round {
+                                            warn!("{} is stalling a message in round {}", my_uid, round);
+                                            continue; // tough is the life of the staller
+                                        }
+                                        if self.malicious_data.disrupt_round == round {
+                                            warn!("{} is disrupting a message in round {}", my_uid, round);
+                                            let mut t = traffic.clone();
+                                            t.payload = traffic.payload[0..traffic.payload.len() / 2].to_vec();
+                                            let mut m = msg.clone();
+                                            m.data = Some(proto::message_out::Data::Traffic(t));
+                                            self.deliver(&m, &my_uid).await;
+                                        }
+                                    }
+                                    self.deliver(&msg, &my_uid).await;
+                                }
+                                message_out::Data::KeygenResult(res) => {
+                                    info!("party [{}] keygen finished!", my_uid);
+                                    break Ok(res.clone());
+                                }
+                                _ => panic!("party [{}] keygen error: bad outgoing message type", my_uid),
+                            };
+                            msg_count += 1;
+                        },
+                        Ok(None) => {
+                            warn!(
+                                "party [{}] keygen execution was not completed due to abort",
+                                my_uid
+                            );
+                            return Ok(KeygenResult::default());
+                        },
 
-            let msg_type = msg.data.as_ref().expect("missing data");
-
-            match msg_type {
-                #[allow(unused_variables)] // allow unsused traffin in non malicious
-                message_out::Data::Traffic(traffic) => {
-                    // in malicous case, if we are stallers we skip the message
-                    #[cfg(feature = "malicious")]
-                    {
-                        let round = keygen_round(msg_count, all_share_count, my_share_count);
-                        if self.malicious_data.timeout_round == round {
-                            warn!("{} is stalling a message in round {}", my_uid, round);
-                            continue; // tough is the life of the staller
-                        }
-                        if self.malicious_data.disrupt_round == round {
-                            warn!("{} is disrupting a message in round {}", my_uid, round);
-                            let mut t = traffic.clone();
-                            t.payload = traffic.payload[0..traffic.payload.len() / 2].to_vec();
-                            let mut m = msg.clone();
-                            m.data = Some(proto::message_out::Data::Traffic(t));
-                            delivery.deliver(&m, &my_uid);
-                        }
-                    }
-                    delivery.deliver(&msg, &my_uid);
-                }
-                message_out::Data::KeygenResult(res) => {
-                    info!("party [{}] keygen finished!", my_uid);
-                    break Ok(res.clone());
-                }
-                _ => panic!("party [{}] keygen error: bad outgoing message type", my_uid),
-            };
-            msg_count += 1;
+                        Err(status) => {
+                            warn!(
+                                "party [{}] keygen execution was not completed due to connection error: {}",
+                                my_uid, status
+                            );
+                            return Err(status);
+                        },
+                    };
+                },
+            }
         };
 
         info!("party [{}] keygen execution complete", my_uid);
@@ -202,12 +271,11 @@ impl TssParty {
     async fn execute_sign(
         &mut self,
         init: SignInit,
-        channels: SenderReceiver,
         delivery: Deliverer,
         my_uid: &str,
         notify: std::sync::Arc<tokio::sync::Notify>,
     ) -> GrpcSignResult {
-        let (sign_server_incoming, rx) = channels;
+        let (sign_server_incoming, rx) = self.get_channels();
         let mut sign_server_outgoing = self
             .client
             .write()
@@ -301,7 +369,15 @@ impl TssParty {
         info!("party [{}] sign execution complete", my_uid);
         result
     }
-
+    pub async fn deliver(&self, msg: &MessageOut, from: &str) {
+        self.deliverer.deliver(msg, from).await;
+    }
+    pub fn get_channels(&self) -> (UnboundedSender<MessageIn>, UnboundedReceiver<MessageIn>) {
+        self.deliverer.get_channels()
+    }
+    fn get_notifier(&self) -> Arc<Notify> {
+        self.deliverer.get_notifier()
+    }
     async fn shutdown(mut self) {
         // self.server_shutdown_sender.send(()).unwrap(); // tell the server to shut down
         // self.server_handle.await.unwrap(); // wait for server to shut down

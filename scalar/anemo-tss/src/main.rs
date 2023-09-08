@@ -6,7 +6,6 @@ use anemo::{
 };
 use anemo_tower::trace::TraceLayer;
 use futures::future::join_all;
-use narwhal_network::ReliableNetwork;
 use scalar_tss::{TssParty, TssPeerClient, TssPeerServer, TssPeerService};
 use tokio::sync::broadcast::error::RecvError;
 use tokio::task::JoinHandle;

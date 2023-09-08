@@ -3,7 +3,7 @@ use crate::proto::abci::{ScalarAbciRequest, ScalarAbciResponse};
 use crate::scalar_abci_server::{ScalarAbci, ScalarAbciServer};
 
 use crate::{
-    gg20_client, message_in, Deliverer, KeygenInit, MessageIn, SenderReceiver, TssParty, NAMESPACE,
+    gg20_client, message_in, AnemoDeliverer, Deliverer, KeygenInit, MessageIn, TssParty, NAMESPACE,
     NUM_SHUTDOWN_RECEIVERS,
 };
 use anemo::PeerId;
@@ -11,7 +11,6 @@ use arc_swap::Guard;
 use bytes::Bytes;
 use fastcrypto::bls12381::min_sig::{BLS12381KeyPair, BLS12381PublicKey};
 use fastcrypto::traits::{KeyPair as _, VerifyingKey};
-use futures::channel::mpsc::SendError;
 use futures::future::try_join_all;
 use futures::stream::FuturesUnordered;
 use mysten_metrics::{RegistryID, RegistryService};
@@ -24,7 +23,6 @@ use narwhal_types::TransactionProto;
 use narwhal_types::{PreSubscribedBroadcastSender, TransactionsClient};
 use narwhal_worker::LocalNarwhalClient;
 use prometheus::Registry;
-use std::fmt::format;
 use std::net::Ipv4Addr;
 use std::sync::Arc;
 use std::time::Instant;
@@ -32,7 +30,6 @@ use std::{error::Error, io::ErrorKind, net::ToSocketAddrs, pin::Pin, time::Durat
 use sui_protocol_config::ProtocolConfig;
 use tokio::sync::{mpsc, watch, RwLock};
 use tokio::task::JoinHandle;
-use tokio::time::interval;
 use tokio_stream::wrappers::UnboundedReceiverStream;
 use tokio_stream::{wrappers::ReceiverStream, Stream, StreamExt};
 use tonic::transport::Channel;
@@ -103,6 +100,7 @@ impl GrpcNodeInner {
 
         self.handles.extend(handles);
         if let Some(tss_party) = self.create_tss_party(keypair, committee.clone()).await {
+            info!("Created TssParty {}", tss_party.get_uid());
             let handles = Self::spawn_tss(
                 tss_party,
                 committee,
@@ -119,6 +117,8 @@ impl GrpcNodeInner {
             .await?;
             // store the registry
             self.handles.extend(handles);
+        } else {
+            error!("Cannot crete tss party")
         }
 
         self.swap_registry(registry);
@@ -151,7 +151,10 @@ impl GrpcNodeInner {
         }
 
         // Now wait until handles have been completed
-        try_join_all(&mut self.handles).await.unwrap();
+        if let Err(e) = try_join_all(&mut self.handles).await {
+            error!("Thread error {:?}", e);
+            panic!("{:?}", e);
+        };
 
         self.swap_registry(None);
 
@@ -190,20 +193,21 @@ impl GrpcNodeInner {
         keypair: KeyPair,
         committee: Committee,
     ) -> Option<TssParty> {
+        let name = keypair.public().clone();
+        // Figure out the id for this authority
+        let authority = committee
+            .authority_by_key(&name)
+            .unwrap_or_else(|| panic!("Our node with key {:?} should be in committee", name));
         let tss_host =
             std::env::var("TSS_HOST").unwrap_or_else(|_| Ipv4Addr::LOCALHOST.to_string());
         let tss_port = std::env::var("TSS_PORT")
             .ok()
             .and_then(|p| p.parse::<u16>().ok())
-            .unwrap_or_else(|| 50010u16);
+            .unwrap_or_else(|| 50010 + authority.id().0);
         //+ authority.id().0;
         let tss_addr = format!("http://{}:{}", tss_host, tss_port);
         info!("TSS address {}", &tss_addr);
-        // let name = keypair.public().clone();
-        // // Figure out the id for this authority
-        // let authority = committee
-        //     .authority_by_key(&name)
-        //     .unwrap_or_else(|| panic!("Our node with key {:?} should be in committee", name));
+
         // let party_uid = PeerId(authority.network_key().0.to_bytes()).to_string();
         // //let party_uid = PeerId(authority.network_key().0.to_bytes()).to_string();
         // let party_uids = committee
@@ -300,7 +304,7 @@ impl GrpcNodeInner {
         Ok(handles)
     }
     pub async fn spawn_tss<State>(
-        tss_party: TssParty,
+        mut tss_party: TssParty,
         committee: Committee,
         // The private-public network key pair of this authority.
         network_keypair: NetworkKeyPair,
@@ -322,91 +326,21 @@ impl GrpcNodeInner {
         registry: &Registry,
         // The channel to send the shutdown signal
         tx_shutdown: &mut PreSubscribedBroadcastSender,
-        channels: SenderReceiver,
     ) -> SubscriberResult<Vec<JoinHandle<()>>> {
         let mut handles = Vec::new();
-        let (tx_tss, rx_tss) = mpsc::unbounded_channel();
-        //Start tofnd client
-        //info!("Connected to tss server at address {:?}", &tss_addr);
-        // let (keygen_delivery, keygen_channel_pairs) =
-        //     Deliverer::with_party_ids(party_uids.as_slice());
-        // let delivery = keygen_delivery.clone();
-        // let node_uid = party_uid.clone();
-        let keygen_init = KeygenInit {
-            new_key_uid: committee.epoch().to_string(),
-            party_uids: tss_party.get_parties(),
-            party_share_counts: vec![1, 1, 1, 1],
-            my_party_index: tss_party.get_index(),
-            threshold: 2,
-        };
-        let notify = std::sync::Arc::new(tokio::sync::Notify::new());
+        let rx_shutdown: narwhal_types::ConditionalBroadcastReceiver = tx_shutdown.subscribe();
         let tss_handler = tokio::spawn(async move {
-            tss_party.execute_keygen(keygen_init, channels, delivery, notify);
-            //client.write().await.keygen(request);
-            // let mut keygen_server_outgoing = tofnd_client
-            //     .keygen(Request::new(UnboundedReceiverStream::new(rx_tss)))
-            //     .await
-            //     .unwrap()
-            //     .into_inner();
-            // let mut msg_count = 1;
-            // let result = loop {
-            //     let msg = match keygen_server_outgoing.message().await {
-            //         Ok(msg) => match msg {
-            //             Some(msg) => msg,
-            //             None => {
-            //                 warn!(
-            //                     "party [{}] keygen execution was not completed due to abort",
-            //                     &node_uid
-            //                 );
-            //                 break Ok(KeygenResult::default());
-            //             }
-            //         },
-            //         Err(status) => {
-            //             warn!(
-            //                 "party [{}] keygen execution was not completed due to connection error: {}",
-            //                 &node_uid, status
-            //             );
-            //             break Err(status);
-            //         }
-            //     };
-            //     let msg_type = msg.data.as_ref().expect("missing data");
-            //     match msg_type {
-            //         #[allow(unused_variables)] // allow unsused traffin in non malicious
-            //         crate::message_out::Data::Traffic(traffic) => {
-            //             // in malicous case, if we are stallers we skip the message
-            //             #[cfg(feature = "malicious")]
-            //             {
-            //                 let round = keygen_round(msg_count, all_share_count, my_share_count);
-            //                 if self.malicious_data.timeout_round == round {
-            //                     warn!("{} is stalling a message in round {}", &node_uid, round);
-            //                     continue; // tough is the life of the staller
-            //                 }
-            //                 if self.malicious_data.disrupt_round == round {
-            //                     warn!("{} is disrupting a message in round {}", node_uid, round);
-            //                     let mut t = traffic.clone();
-            //                     t.payload = traffic.payload[0..traffic.payload.len() / 2].to_vec();
-            //                     let mut m = msg.clone();
-            //                     m.data = Some(proto::message_out::Data::Traffic(t));
-            //                     delivery.deliver(&m, &node_uid);
-            //                 }
-            //             }
-            //             delivery.deliver(&msg, &node_uid);
-            //         }
-            //         crate::message_out::Data::KeygenResult(res) => {
-            //             info!("party [{}] keygen finished!", &node_uid);
-            //             break Ok(res.clone());
-            //         }
-            //         _ => panic!(
-            //             "party [{}] keygen error: bad outgoing message type",
-            //             &node_uid
-            //         ),
-            //     };
-            //     msg_count += 1;
-            // };
-            //info!("party [{}] keygen execution complete", &node_uid);
+            info!("Spawn thread for execute keygen");
+            match tss_party.execute_keygen(rx_shutdown).await {
+                Ok(res) => {
+                    info!("Execute keygen result {:?}", res);
+                }
+                Err(e) => {
+                    warn!("Execute keygen error {:?}", e);
+                }
+            }
         });
         handles.push(tss_handler);
-
         // info!(
         //     "Sent keygen_init {:?} for party [{}]",
         //     &keygen_init, &party_uid

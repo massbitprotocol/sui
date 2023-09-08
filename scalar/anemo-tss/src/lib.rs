@@ -14,10 +14,13 @@ use serde::{Deserialize, Serialize};
 use tracing::info;
 pub use tss::*;
 pub use types::*;
-
-include!(concat!(env!("OUT_DIR"), "/tss.network.TssPeer.rs"));
-pub use tss_peer_client::TssPeerClient;
-pub use tss_peer_server::{TssPeer, TssPeerServer};
+pub mod tss_anemo {
+    include!(concat!(env!("OUT_DIR"), "/tss.network.TssPeer.rs"));
+}
+pub use tss_anemo::{
+    tss_peer_client::TssPeerClient,
+    tss_peer_server::{TssPeer, TssPeerServer},
+};
 
 #[derive(Debug, Deserialize, Serialize)]
 pub struct HelloRequest {

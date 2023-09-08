@@ -11,13 +11,19 @@ CONFIG_DIR=/scalar/config
 
 tss() {
     PORT=$TSS_PORT
-    rm -rf tss/$TOFND
+    for ind in {0..3}
+    do
+        rm -rf tss/${TOFND}${ind}
+    done
     /usr/local/bin/scalar-tofnd --no-password -d "tss/$TOFND" -p ${PORT} -m create
-    echo "Inited tofnd at dir tss/$TOFND and port $PORT"
-    rm tss/$TOFND/export
-    echo "Running tofnd at dir tss/$TOFND and port $PORT as daemon"
+    #echo "Inited tofnd at dir tss/$TOFND and port $PORT"
+    for ind in {0..3}
+    do
+        rm tss/${TOFND}${ind}/export
+    done
+    #echo "Running tofnd at dir tss/$TOFND and port $PORT as daemon"
     /usr/local/bin/scalar-tofnd --no-password -d "tss/$TOFND" -p ${PORT} -m existing
-    echo "Finished tofnd at dir tss/$TOFND and port $PORT"
+    #echo "Finished tofnd at dir tss/$TOFND and port $PORT"
 }
 
 validator() {

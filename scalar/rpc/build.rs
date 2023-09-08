@@ -12,9 +12,62 @@ fn main() {
             &["proto"],
         )
         .expect("Failed to compile proto(s)");
+    build_tss_service();
     // build_json_codec_service();
 }
 
+fn build_tss_service() {
+    let tss_service = anemo_build::manual::Service::builder()
+        .name("TssPeer")
+        .package("tss.network")
+        // .method(
+        //     anemo_build::manual::Method::builder()
+        //         .name("say_hello")
+        //         .route_name("SayHello")
+        //         .request_type("crate::HelloRequest")
+        //         .response_type("crate::HelloResponse")
+        //         .codec_path("anemo::rpc::codec::BincodeCodec")
+        //         // .codec_path("anemo::rpc::codec::JsonCodec")
+        //         // .server_handler_return_raw_bytes(true)
+        //         .build(),
+        // )
+        .method(
+            anemo_build::manual::Method::builder()
+                .name("keygen")
+                .route_name("KeyGen")
+                .request_type("crate::TssAnemoKeygenRequest")
+                .response_type("crate::TssAnemoKeygenResponse")
+                .codec_path("anemo::rpc::codec::BincodeCodec")
+                // .codec_path("anemo::rpc::codec::JsonCodec")
+                // .server_handler_return_raw_bytes(true)
+                .build(),
+        )
+        .method(
+            anemo_build::manual::Method::builder()
+                .name("sign")
+                .route_name("Sign")
+                .request_type("crate::TssAnemoSignRequest")
+                .response_type("crate::TssAnemoSignResponse")
+                .codec_path("anemo::rpc::codec::BincodeCodec")
+                // .codec_path("anemo::rpc::codec::JsonCodec")
+                // .server_handler_return_raw_bytes(true)
+                .build(),
+        )
+        .method(
+            anemo_build::manual::Method::builder()
+                .name("verify")
+                .route_name("Verify")
+                .request_type("crate::TssAnemoVerifyRequest")
+                .response_type("crate::TssAnemoVerifyResponse")
+                .codec_path("anemo::rpc::codec::BincodeCodec")
+                // .codec_path("anemo::rpc::codec::JsonCodec")
+                // .server_handler_return_raw_bytes(true)
+                .build(),
+        )
+        .build();
+
+    anemo_build::manual::Builder::new().compile(&[tss_service]);
+}
 // Manually define the json.helloworld.Greeter service which used a custom JsonCodec to use json
 // serialization instead of protobuf for sending messages on the wire.
 // This will result in generated client and server code which relies on its request, response and

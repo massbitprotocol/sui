@@ -3,8 +3,8 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use crate::{CommitteeUpdateError, ConfigError, Epoch, Stake};
-use crypto::{NetworkPublicKey, PublicKey, PublicKeyBytes};
-use fastcrypto::traits::EncodeDecodeBase64;
+use crypto::{NetworkKeyPair, NetworkPublicKey, PublicKey, PublicKeyBytes};
+use fastcrypto::traits::{EncodeDecodeBase64, KeyPair};
 use mysten_network::Multiaddr;
 use mysten_util_mem::MallocSizeOf;
 use rand::rngs::StdRng;
@@ -32,6 +32,8 @@ pub struct Authority {
     network_key: NetworkPublicKey,
     /// The validator's hostname
     hostname: String,
+    /// Tss peer key
+    tss_key: NetworkPublicKey,
     /// There are secondary indexes that should be initialised before we are ready to use the
     /// authority - this bool protect us for premature use.
     #[serde(skip)]
@@ -51,7 +53,9 @@ impl Authority {
         hostname: String,
     ) -> Self {
         let protocol_key_bytes = PublicKeyBytes::from(&protocol_key);
-
+        //Todo: Generate AnemoTss key
+        let mut rng = StdRng::from_seed([0; 32]);
+        let tss_key = NetworkKeyPair::generate(&mut rng).public().clone();
         Self {
             id: Default::default(),
             protocol_key,
@@ -60,6 +64,7 @@ impl Authority {
             primary_address,
             network_key,
             hostname,
+            tss_key,
             initialised: false,
         }
     }
@@ -102,6 +107,10 @@ impl Authority {
     pub fn hostname(&self) -> &str {
         assert!(self.initialised);
         self.hostname.as_str()
+    }
+
+    pub fn tss_key(&self) -> NetworkPublicKey {
+        self.tss_key.clone()
     }
 }
 

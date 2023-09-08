@@ -9606,9 +9606,12 @@ name = "scalar-rpc"
 version = "0.1.0"
 dependencies = [
  "anemo",
+ "anemo-build",
+ "anemo-tower",
  "anyhow",
  "arc-swap",
  "async-stream",
+ "backoff",
  "bytes",
  "either",
  "fastcrypto",
