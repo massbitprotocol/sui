@@ -328,15 +328,25 @@ impl GrpcNodeInner {
         tx_shutdown: &mut PreSubscribedBroadcastSender,
     ) -> SubscriberResult<Vec<JoinHandle<()>>> {
         let mut handles = Vec::new();
-        let rx_shutdown: narwhal_types::ConditionalBroadcastReceiver = tx_shutdown.subscribe();
+        let mut rx_shutdown: narwhal_types::ConditionalBroadcastReceiver = tx_shutdown.subscribe();
         let tss_handler = tokio::spawn(async move {
             info!("Spawn thread for execute keygen");
-            match tss_party.execute_keygen(rx_shutdown).await {
-                Ok(res) => {
-                    info!("Execute keygen result {:?}", res);
-                }
-                Err(e) => {
-                    warn!("Execute keygen error {:?}", e);
+            tokio::select! {
+                _ = rx_shutdown.receiver.recv() => {
+                    warn!("Node is shuting down");
+                    tss_party.shutdown().await;
+                    //return Err(Status::cancelled("Node is shuting down"));
+                },
+                res = tss_party.execute_keygen() => {
+                    match res {
+                        Ok(res) => {
+                            info!("Execute keygen result {:?}", res);
+                        }
+                        Err(e) => {
+                            warn!("Execute keygen error {:?}", e);
+                        }
+                    }
+                    //return res;
                 }
             }
         });

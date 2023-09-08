@@ -82,17 +82,17 @@ async fn main() -> Result<(), anyhow::Error> {
         handles.push(network_handle);
     }
     let size = networks.len();
-    for i in 0..size {
-        let cur_network = networks.get(i).unwrap();
-        let next_network = networks.get((i + 1) % size).unwrap();
-        let peer_id = cur_network
-            .connect(next_network.local_addr())
-            .await
-            .unwrap();
-        let peer = cur_network.peer(peer_id).unwrap();
-        let client_handle = TssParty::spawn_client(peer).await;
-        handles.push(client_handle);
-    }
+    // for i in 0..size {
+    //     let cur_network = networks.get(i).unwrap();
+    //     let next_network = networks.get((i + 1) % size).unwrap();
+    //     let peer_id = cur_network
+    //         .connect(next_network.local_addr())
+    //         .await
+    //         .unwrap();
+    //     let peer = cur_network.peer(peer_id).unwrap();
+    //     let client_handle = TssParty::spawn_client(peer).await;
+    //     handles.push(client_handle);
+    // }
     // for network in networks.into_iter() {
     //     info!("Network address {:?}", network.local_addr());
     //     let peer_id = network.connect(network.local_addr()).await.unwrap();

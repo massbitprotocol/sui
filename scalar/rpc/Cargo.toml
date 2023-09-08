@@ -26,6 +26,7 @@ narwhal-network.workspace = true
 narwhal-node.workspace = true
 narwhal-types.workspace = true
 narwhal-worker.workspace = true
+sui-config.workspace = true
 tokio = { version = "1.0", features = ["rt-multi-thread", "macros"] }
 tokio-stream = { version = "0.1.14" }
 prometheus.workspace = true

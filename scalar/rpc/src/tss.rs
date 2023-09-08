@@ -4,13 +4,19 @@ use crate::{
     AnemoDeliverer, KeyPresenceRequest, KeygenInit, MessageIn, MessageOut, SignInit, TrafficIn,
 };
 use crate::{TssAnemoKeygenRequest, TssPeerClient, TssPeerServer, TssPeerService};
-use anemo::{types::PeerInfo, Network, PeerId};
+use anemo::{
+    types::{Address, PeerInfo},
+    Network, PeerId,
+};
 use anemo_tower::trace::TraceLayer;
 use fastcrypto::traits::{KeyPair as _, VerifyingKey};
+use mysten_network::multiaddr::Protocol;
+use mysten_network::Multiaddr;
 use narwhal_config::Committee;
 use narwhal_crypto::{KeyPair, NetworkKeyPair, PublicKey};
 use narwhal_types::PreSubscribedBroadcastSender;
-use std::{collections::HashMap, sync::Arc};
+use std::{collections::HashMap, net::Ipv4Addr, sync::Arc};
+use sui_config::local_ip_utils;
 use tokio::sync::{
     mpsc::{self, UnboundedReceiver, UnboundedSender},
     Notify, RwLock,
@@ -46,13 +52,18 @@ impl TssParty {
         let party_id = Self::create_tss_peer_id(authority);
         //Todo: TssAnemoNetwork
         let addr = Self::create_peer_addr(authority);
-        info!("Create AnemoTss network at {:?}", &addr);
-        let network = Network::bind(addr)
+        //info!("Create AnemoTss network at {:?}", &addr);
+        let network = Network::bind(addr.clone())
             .private_key(party_id.0.clone())
             .server_name("AnemoTss")
             .outbound_request_layer(TraceLayer::new_for_client_and_server_errors())
             .start(TssPeerServer::new(TssPeerService::default()))
             .unwrap();
+        info!(
+            "Create AnemoTss network at {:?}, local address {:?}",
+            &addr,
+            network.local_addr()
+        );
         committee
             .authorities()
             .filter(|auth| auth.id().0 != authority.id().0)
@@ -61,7 +72,7 @@ impl TssParty {
                 let peer_info = PeerInfo {
                     peer_id: Self::create_tss_peer_id(auth),
                     affinity: anemo::types::PeerAffinity::High,
-                    address: vec![peer_addr.into()],
+                    address: vec![peer_addr],
                 };
                 info!("AnemoTss add known peers {:?}", peer_info);
                 network.known_peers().insert(peer_info);
@@ -69,7 +80,7 @@ impl TssParty {
         let peer_names = committee
             .authorities()
             .filter(|auth| auth.id().0 != authority.id().0)
-            .map(|auth| auth.tss_key().clone())
+            .map(|auth| (auth.tss_key().clone(), Self::create_peer_addr(auth)))
             .collect();
         let deliverer = AnemoDeliverer::new(network, peer_names);
         Self {
@@ -79,8 +90,15 @@ impl TssParty {
             committee,
         }
     }
-    pub fn create_peer_addr(authority: &narwhal_config::Authority) -> String {
-        format!("127.0.0.1:{}", 50020 + authority.id().0)
+    pub fn create_peer_addr(authority: &narwhal_config::Authority) -> Address {
+        let host = "127.0.0.1";
+        let port = 50020 + authority.id().0;
+        let address: Multiaddr = format!("/ip4/{}/udp/{}", host, port).parse().unwrap();
+        // let address = address
+        //     .replace(0, |_protocol| Some(Protocol::Ip4(Ipv4Addr::UNSPECIFIED)))
+        //     .unwrap();
+        address.to_anemo_address().unwrap()
+        //format!("{}:{}", host, port)
     }
     pub fn create_tss_peer_id(authority: &narwhal_config::Authority) -> PeerId {
         PeerId(authority.tss_key().0.to_bytes())
@@ -126,10 +144,7 @@ impl TssParty {
             threshold: 2,
         }
     }
-    pub async fn execute_keygen(
-        &mut self,
-        mut rx_shutdown: narwhal_types::ConditionalBroadcastReceiver,
-    ) -> GrpcKeygenResult {
+    pub async fn execute_keygen(&mut self) -> GrpcKeygenResult {
         let keygen_init = self.create_keygen_init();
         info!("Keygen init {:?}", &keygen_init);
         let my_uid =
@@ -176,61 +191,56 @@ impl TssParty {
         let mut msg_count = 1;
 
         let result = loop {
-            tokio::select! {
-                _ = rx_shutdown.receiver.recv() => {
-                    return Err(Status::cancelled("Node is shuting down"));
-                },
-                res =  keygen_server_outgoing.message() => {
-                    match res {
-                        Ok(Some(msg)) => {
-                            let msg_type = msg.data.as_ref().expect("missing data");
-                            match msg_type {
-                                #[allow(unused_variables)] // allow unsused traffin in non malicious
-                                message_out::Data::Traffic(traffic) => {
-                                    // in malicous case, if we are stallers we skip the message
-                                    #[cfg(feature = "malicious")]
-                                    {
-                                        let round = keygen_round(msg_count, all_share_count, my_share_count);
-                                        if self.malicious_data.timeout_round == round {
-                                            warn!("{} is stalling a message in round {}", my_uid, round);
-                                            continue; // tough is the life of the staller
-                                        }
-                                        if self.malicious_data.disrupt_round == round {
-                                            warn!("{} is disrupting a message in round {}", my_uid, round);
-                                            let mut t = traffic.clone();
-                                            t.payload = traffic.payload[0..traffic.payload.len() / 2].to_vec();
-                                            let mut m = msg.clone();
-                                            m.data = Some(proto::message_out::Data::Traffic(t));
-                                            self.deliver(&m, &my_uid).await;
-                                        }
-                                    }
-                                    self.deliver(&msg, &my_uid).await;
+            match keygen_server_outgoing.message().await {
+                Ok(Some(msg)) => {
+                    let msg_type = msg.data.as_ref().expect("missing data");
+                    match msg_type {
+                        #[allow(unused_variables)] // allow unsused traffin in non malicious
+                        message_out::Data::Traffic(traffic) => {
+                            // in malicous case, if we are stallers we skip the message
+                            #[cfg(feature = "malicious")]
+                            {
+                                let round =
+                                    keygen_round(msg_count, all_share_count, my_share_count);
+                                if self.malicious_data.timeout_round == round {
+                                    warn!("{} is stalling a message in round {}", my_uid, round);
+                                    continue; // tough is the life of the staller
                                 }
-                                message_out::Data::KeygenResult(res) => {
-                                    info!("party [{}] keygen finished!", my_uid);
-                                    break Ok(res.clone());
+                                if self.malicious_data.disrupt_round == round {
+                                    warn!("{} is disrupting a message in round {}", my_uid, round);
+                                    let mut t = traffic.clone();
+                                    t.payload =
+                                        traffic.payload[0..traffic.payload.len() / 2].to_vec();
+                                    let mut m = msg.clone();
+                                    m.data = Some(proto::message_out::Data::Traffic(t));
+                                    self.deliver(&m, &my_uid).await;
                                 }
-                                _ => panic!("party [{}] keygen error: bad outgoing message type", my_uid),
-                            };
-                            msg_count += 1;
-                        },
-                        Ok(None) => {
-                            warn!(
-                                "party [{}] keygen execution was not completed due to abort",
-                                my_uid
-                            );
-                            return Ok(KeygenResult::default());
-                        },
-
-                        Err(status) => {
-                            warn!(
-                                "party [{}] keygen execution was not completed due to connection error: {}",
-                                my_uid, status
-                            );
-                            return Err(status);
-                        },
+                            }
+                            self.deliver(&msg, &my_uid).await;
+                        }
+                        message_out::Data::KeygenResult(res) => {
+                            info!("party [{}] keygen finished!", my_uid);
+                            break Ok(res.clone());
+                        }
+                        _ => panic!("party [{}] keygen error: bad outgoing message type", my_uid),
                     };
-                },
+                    msg_count += 1;
+                }
+                Ok(None) => {
+                    warn!(
+                        "party [{}] keygen execution was not completed due to abort",
+                        my_uid
+                    );
+                    return Ok(KeygenResult::default());
+                }
+
+                Err(status) => {
+                    warn!(
+                        "party [{}] keygen execution was not completed due to connection error: {}",
+                        my_uid, status
+                    );
+                    return Err(status);
+                }
             }
         };
 
@@ -378,7 +388,8 @@ impl TssParty {
     fn get_notifier(&self) -> Arc<Notify> {
         self.deliverer.get_notifier()
     }
-    async fn shutdown(mut self) {
+    pub async fn shutdown(&mut self) -> anyhow::Result<()> {
+        self.deliverer.shutdown().await
         // self.server_shutdown_sender.send(()).unwrap(); // tell the server to shut down
         // self.server_handle.await.unwrap(); // wait for server to shut down
         // info!("party [{}] shutdown success", self.server_port);

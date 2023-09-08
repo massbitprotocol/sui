@@ -5,13 +5,18 @@ use crate::{
     TssPeer, TssPeerClient,
 };
 use anemo::rpc::Status;
+use anemo::types::Address;
 use anemo::Response;
 use anemo::{Network, PeerId};
 use anyhow::format_err;
 use anyhow::Result;
 use futures::future::join_all;
 use narwhal_crypto::NetworkPublicKey;
-use narwhal_network::{CancelOnDropHandler, RetryConfig};
+use narwhal_network::{
+    anemo_ext::{NetworkExt, WaitingPeer},
+    client::NetworkClient,
+    CancelOnDropHandler, RetryConfig,
+};
 use tokio::sync::mpsc;
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 use tokio::task::JoinHandle;
@@ -54,11 +59,11 @@ impl TssPeer for TssPeerService {
 #[derive(Clone)]
 pub struct AnemoDeliverer {
     pub network: Network,
-    pub peers: Vec<NetworkPublicKey>,
+    pub peers: Vec<(NetworkPublicKey, Address)>,
 }
 
 impl AnemoDeliverer {
-    pub fn new(network: Network, peers: Vec<NetworkPublicKey>) -> Self {
+    pub fn new(network: Network, peers: Vec<(NetworkPublicKey, Address)>) -> Self {
         AnemoDeliverer { network, peers }
     }
     pub async fn deliver(&self, msg: &MessageOut, from: &str) {
@@ -78,8 +83,27 @@ impl AnemoDeliverer {
             is_broadcast: msg.is_broadcast,
             payload: msg.payload.clone(),
         };
-
-        let handlers = self.network.broadcast(self.peers.clone(), &message);
+        let peer_id = self.network.peer_id();
+        for (_, addr) in self.peers.iter() {
+            match self.network.connect(addr.clone()).await {
+                Ok(p) => {
+                    info!(
+                        "Peer {:?}, Connected to addr {} with peer {:?}",
+                        &peer_id,
+                        addr.to_string(),
+                        p
+                    );
+                }
+                Err(e) => {
+                    info!(
+                        "Peer {:?}, Connected to addr {:?} with error {:?}",
+                        &peer_id, addr, e
+                    );
+                }
+            }
+        }
+        let peers = self.peers.iter().map(|(peer, _)| peer.clone()).collect();
+        let handlers = self.network.broadcast(peers, &message);
         let res = join_all(handlers).await;
         info!("Broadcast results {:?}", res);
     }
@@ -91,6 +115,15 @@ impl AnemoDeliverer {
     }
     pub fn get_notifier(&self) -> std::sync::Arc<tokio::sync::Notify> {
         std::sync::Arc::new(tokio::sync::Notify::new())
+    }
+    pub async fn shutdown(&mut self) -> Result<()> {
+        for (peer, _) in self.peers.iter() {
+            let peer_id = PeerId(peer.0.to_bytes());
+            if let Err(e) = self.network.disconnect(peer_id) {
+                error!("Disconnect peer error {:?}", e);
+            }
+        }
+        self.network.shutdown().await
     }
 }
 
@@ -162,10 +195,16 @@ impl TssNodeRpc<TssAnemoKeygenMessage> for anemo::Network {
     ) -> JoinHandle<Result<anemo::Response<Self::Response>, anemo::rpc::Status>> {
         let peer_id = PeerId(peer.0.to_bytes());
         let message = message.to_owned();
-        let peer = self
-            .peer(peer_id.clone())
-            .ok_or_else(|| format_err!("AnemoTss has no connection with peer {peer_id}"))
-            .unwrap();
+        info!(
+            "Create waiting peer from {:?} to {:?}",
+            self.peer_id().to_string(),
+            peer_id.to_string()
+        );
+        let peer = self.waiting_peer(peer_id);
+        // let peer = self
+        //     .peer(peer_id.clone())
+        //     .ok_or_else(|| format_err!("AnemoTss has no connection with peer {peer_id}"))
+        //     .unwrap();
         let handle = tokio::spawn(async move {
             let request = TssAnemoKeygenRequest {
                 message: message.clone(),
@@ -175,7 +214,16 @@ impl TssNodeRpc<TssAnemoKeygenMessage> for anemo::Network {
                 &message,
                 peer_id.to_string()
             );
-            TssPeerClient::new(peer).keygen(request).await
+            let result = TssPeerClient::new(peer).keygen(request).await;
+            match &result {
+                Ok(res) => {
+                    info!("Keygen result {:?}", res)
+                }
+                Err(e) => {
+                    info!("Keygen error {:?}", e)
+                }
+            };
+            result
         });
         handle
     }

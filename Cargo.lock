@@ -9638,6 +9638,7 @@ dependencies = [
  "rustls-pemfile",
  "serde 1.0.152",
  "serde_json",
+ "sui-config",
  "sui-protocol-config",
  "tokio",
  "tokio-rustls 0.24.0",

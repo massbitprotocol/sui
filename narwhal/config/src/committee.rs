@@ -54,7 +54,7 @@ impl Authority {
     ) -> Self {
         let protocol_key_bytes = PublicKeyBytes::from(&protocol_key);
         //Todo: Generate AnemoTss key
-        let mut rng = StdRng::from_seed([0; 32]);
+        let mut rng = StdRng::from_seed(network_key.0.to_bytes());
         let tss_key = NetworkKeyPair::generate(&mut rng).public().clone();
         Self {
             id: Default::default(),
