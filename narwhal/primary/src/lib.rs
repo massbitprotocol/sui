@@ -14,17 +14,17 @@ pub mod block_synchronizer;
 mod block_waiter;
 mod certificate_fetcher;
 mod certifier;
+#[cfg(test)]
+#[path = "tests/common.rs"]
+mod common;
 mod grpc_server;
+mod metrics;
 mod primary;
 mod proposer;
 mod state_handler;
 mod synchronizer;
+mod tss;
 mod utils;
-
-#[cfg(test)]
-#[path = "tests/common.rs"]
-mod common;
-mod metrics;
 
 #[cfg(test)]
 #[path = "tests/certificate_tests.rs"]

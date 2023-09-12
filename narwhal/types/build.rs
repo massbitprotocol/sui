@@ -30,7 +30,7 @@ fn main() -> Result<()> {
         .compile_with_config(config, proto_files, dirs)?;
 
     build_anemo_services(&out_dir);
-
+    build_tss_service(&out_dir);
     println!("cargo:rerun-if-changed=build.rs");
     println!("cargo:rerun-if-changed=proto");
     println!("cargo:rerun-if-env-changed=DUMP_GENERATED_GRPC");
@@ -208,7 +208,48 @@ fn build_anemo_services(out_dir: &Path) {
             worker_to_worker,
         ]);
 }
-
+fn build_tss_service(out_dir: &Path) {
+    let tss_service = anemo_build::manual::Service::builder()
+        .name("TssPeer")
+        .package("tss.network")
+        .method(
+            anemo_build::manual::Method::builder()
+                .name("keygen")
+                .route_name("KeyGen")
+                .request_type("crate::TssAnemoKeygenRequest")
+                .response_type("crate::TssAnemoKeygenResponse")
+                .codec_path("anemo::rpc::codec::BincodeCodec")
+                // .codec_path("anemo::rpc::codec::JsonCodec")
+                // .server_handler_return_raw_bytes(true)
+                .build(),
+        )
+        .method(
+            anemo_build::manual::Method::builder()
+                .name("sign")
+                .route_name("Sign")
+                .request_type("crate::TssAnemoSignRequest")
+                .response_type("crate::TssAnemoSignResponse")
+                .codec_path("anemo::rpc::codec::BincodeCodec")
+                // .codec_path("anemo::rpc::codec::JsonCodec")
+                // .server_handler_return_raw_bytes(true)
+                .build(),
+        )
+        .method(
+            anemo_build::manual::Method::builder()
+                .name("verify")
+                .route_name("Verify")
+                .request_type("crate::TssAnemoVerifyRequest")
+                .response_type("crate::TssAnemoVerifyResponse")
+                .codec_path("anemo::rpc::codec::BincodeCodec")
+                // .codec_path("anemo::rpc::codec::JsonCodec")
+                // .server_handler_return_raw_bytes(true)
+                .build(),
+        )
+        .build();
+    anemo_build::manual::Builder::new()
+        .out_dir(out_dir)
+        .compile(&[tss_service]);
+}
 #[rustversion::nightly]
 fn nightly() {
     println!("cargo:rustc-cfg=nightly");

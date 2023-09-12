@@ -1,4 +1,5 @@
 mod party;
+mod primary_tss;
 mod tss;
 mod types;
 use anemo::{rpc::Status, Request, Response};
@@ -10,6 +11,7 @@ use anemo::{rpc::Status, Request, Response};
 //     greeter_server::{Greeter, GreeterServer},
 // };
 pub use party::*;
+pub use primary_tss::*;
 use serde::{Deserialize, Serialize};
 use tracing::info;
 pub use tss::*;

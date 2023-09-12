@@ -7004,8 +7004,10 @@ dependencies = [
  "parking_lot 0.12.1",
  "prometheus",
  "proptest",
+ "prost",
  "rand 0.8.5",
  "reqwest",
+ "serde 1.0.152",
  "sui-macros",
  "sui-protocol-config",
  "tap",
@@ -7013,10 +7015,12 @@ dependencies = [
  "tempfile",
  "thiserror",
  "tokio",
+ "tokio-stream",
  "tonic 0.9.2",
  "tower",
  "tracing",
  "typed-store",
+ "uuid 1.4.1",
  "workspace-hack",
 ]
 

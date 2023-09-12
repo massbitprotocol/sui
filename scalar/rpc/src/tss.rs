@@ -57,6 +57,7 @@ impl TssParty {
             .private_key(party_id.0.clone())
             .server_name("AnemoTss")
             .outbound_request_layer(TraceLayer::new_for_client_and_server_errors())
+            //Todo: add route service
             .start(TssPeerServer::new(TssPeerService::default()))
             .unwrap();
         info!(

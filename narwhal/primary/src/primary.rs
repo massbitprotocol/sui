@@ -11,9 +11,9 @@ use crate::{
     proposer::{OurDigestMessage, Proposer},
     state_handler::StateHandler,
     synchronizer::Synchronizer,
+    tss::{TssParty, TssPeerService},
     BlockRemover,
 };
-
 use anemo::{codegen::InboundRequestLayer, types::Address};
 use anemo::{types::PeerInfo, Network, PeerId};
 use anemo_tower::auth::RequireAuthorizationLayer;
@@ -55,8 +55,11 @@ use std::{
     thread::sleep,
     time::Duration,
 };
-use storage::{CertificateStore, HeaderStore, PayloadStore, ProposerStore, VoteDigestStore};
+use storage::{
+    CertificateStore, HeaderStore, PayloadStore, ProposerStore, TssStore, VoteDigestStore,
+};
 use sui_protocol_config::ProtocolConfig;
+use tokio::sync::RwLock;
 use tokio::{sync::watch, task::JoinHandle};
 use tokio::{
     sync::{mpsc, oneshot},
@@ -71,9 +74,9 @@ use types::{
     FetchCertificatesResponse, GetCertificatesRequest, GetCertificatesResponse, Header, HeaderAPI,
     MetadataAPI, PayloadAvailabilityRequest, PayloadAvailabilityResponse,
     PreSubscribedBroadcastSender, PrimaryToPrimary, PrimaryToPrimaryServer, RequestVoteRequest,
-    RequestVoteResponse, Round, SendCertificateRequest, SendCertificateResponse, Vote, VoteInfoAPI,
-    WorkerOthersBatchMessage, WorkerOurBatchMessage, WorkerOwnBatchMessage, WorkerToPrimary,
-    WorkerToPrimaryServer,
+    RequestVoteResponse, Round, SendCertificateRequest, SendCertificateResponse, TssPeerServer,
+    Vote, VoteInfoAPI, WorkerOthersBatchMessage, WorkerOurBatchMessage, WorkerOwnBatchMessage,
+    WorkerToPrimary, WorkerToPrimaryServer,
 };
 
 #[cfg(any(test))]
@@ -108,6 +111,7 @@ impl Primary {
         proposer_store: ProposerStore,
         payload_store: PayloadStore,
         vote_digest_store: VoteDigestStore,
+        tss_store: Arc<RwLock<TssStore>>,
         tx_new_certificates: Sender<Certificate>,
         rx_committed_certificates: Receiver<(Round, Vec<Certificate>)>,
         rx_consensus_round_updates: watch::Receiver<ConsensusRound>,
@@ -286,9 +290,16 @@ impl Primary {
             .route_layer(RequireAuthorizationLayer::new(AllowedEpoch::new(
                 epoch_string.clone(),
             )));
-
+        //Tss service
+        let (tx_tss_genkey, rx_tss_genkey) = mpsc::unbounded_channel();
+        let (tx_tss_sign, rx_tss_sign) = mpsc::unbounded_channel();
+        let tss_service = TssPeerServer::new(TssPeerService::new(
+            tx_tss_genkey.clone(),
+            tx_tss_sign.clone(),
+        ));
         let routes = anemo::Router::new()
             .add_rpc_service(primary_service)
+            .add_rpc_service(tss_service)
             .route_layer(RequireAuthorizationLayer::new(AllowedEpoch::new(
                 epoch_string.clone(),
             )))
@@ -504,12 +515,22 @@ impl Primary {
             node_metrics,
             leader_schedule,
         );
-
+        // Modified: Add tss handle
+        let mut tss_party = TssParty::new(
+            authority.clone(),
+            committee.clone(),
+            network.clone(),
+            tss_store,
+            tx_tss_genkey,
+            tx_tss_sign,
+        );
+        let tss_handle = tss_party.spawn(rx_tss_genkey, rx_tss_sign, tx_shutdown.subscribe());
         let mut handles = vec![
             core_handle,
             certificate_fetcher_handle,
             proposer_handle,
             connection_monitor_handle,
+            tss_handle,
         ];
         handles.extend(admin_handles);
 

@@ -1,5 +1,12 @@
 // Copyright (c) Mysten Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
+mod tss {
+    include!(concat!(env!("OUT_DIR"), "/tss.network.TssPeer.rs"));
+}
+pub use tss::{
+    tss_peer_client::TssPeerClient,
+    tss_peer_server::{TssPeer, TssPeerServer},
+};
 mod narwhal {
     #![allow(clippy::derive_partial_eq_without_eq)]
     tonic::include_proto!("narwhal");

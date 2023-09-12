@@ -6,7 +6,7 @@ use crate::proposer_store::ProposerKey;
 use crate::vote_digest_store::VoteDigestStore;
 use crate::{
     CertificateStore, CertificateStoreCache, CertificateStoreCacheMetrics, ConsensusStore,
-    HeaderStore, ProposerStore,
+    HeaderStore, ProposerStore, TssStore,
 };
 use config::{AuthorityIdentifier, WorkerId};
 use std::num::NonZeroUsize;
@@ -15,6 +15,7 @@ use std::time::Duration;
 use store::metrics::SamplingInterval;
 use store::reopen;
 use store::rocks::{default_db_options, open_cf_opts, DBMap, MetricConf, ReadWriteOptions};
+use tokio::sync::RwLock;
 use types::{
     Batch, BatchDigest, Certificate, CertificateDigest, CommittedSubDagShell, ConsensusCommit,
     Header, HeaderDigest, Round, SequenceNumber, VoteInfo,
@@ -33,6 +34,7 @@ pub struct NodeStorage {
     pub payload_store: PayloadStore,
     pub batch_store: DBMap<BatchDigest, Batch>,
     pub consensus_store: Arc<ConsensusStore>,
+    pub tss_store: Arc<RwLock<TssStore>>,
 }
 
 impl NodeStorage {
@@ -149,7 +151,7 @@ impl NodeStorage {
             sub_dag_index_map,
             committed_sub_dag_map,
         ));
-
+        let tss_store = Arc::new(RwLock::new(TssStore::default()));
         Self {
             proposer_store,
             vote_digest_store,
@@ -158,6 +160,7 @@ impl NodeStorage {
             payload_store,
             batch_store,
             consensus_store,
+            tss_store,
         }
     }
 }

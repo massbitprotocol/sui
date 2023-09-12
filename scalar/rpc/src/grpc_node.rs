@@ -99,27 +99,27 @@ impl GrpcNodeInner {
         // now keep the handlers
 
         self.handles.extend(handles);
-        if let Some(tss_party) = self.create_tss_party(keypair, committee.clone()).await {
-            info!("Created TssParty {}", tss_party.get_uid());
-            let handles = Self::spawn_tss(
-                tss_party,
-                committee,
-                network_keypair,
-                worker_cache,
-                client.clone(),
-                protocol_config.clone(),
-                self.parameters.clone(),
-                self.internal_flag,
-                execution_state,
-                &registry.as_ref().unwrap(),
-                &mut tx_shutdown,
-            )
-            .await?;
-            // store the registry
-            self.handles.extend(handles);
-        } else {
-            error!("Cannot crete tss party")
-        }
+        // if let Some(tss_party) = self.create_tss_party(keypair, committee.clone()).await {
+        //     info!("Created TssParty {}", tss_party.get_uid());
+        //     let handles = Self::spawn_tss(
+        //         tss_party,
+        //         committee,
+        //         network_keypair,
+        //         worker_cache,
+        //         client.clone(),
+        //         protocol_config.clone(),
+        //         self.parameters.clone(),
+        //         self.internal_flag,
+        //         execution_state,
+        //         &registry.as_ref().unwrap(),
+        //         &mut tx_shutdown,
+        //     )
+        //     .await?;
+        //     // store the registry
+        //     self.handles.extend(handles);
+        // } else {
+        //     error!("Cannot crete tss party")
+        // }
 
         self.swap_registry(registry);
         self.tx_shutdown = Some(tx_shutdown);
