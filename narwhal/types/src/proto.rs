@@ -1,11 +1,14 @@
 // Copyright (c) Mysten Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 mod tss {
+    tonic::include_proto!("tofnd");
     include!(concat!(env!("OUT_DIR"), "/tss.network.TssPeer.rs"));
 }
 pub use tss::{
+    gg20_client, message_in, message_out,
     tss_peer_client::TssPeerClient,
     tss_peer_server::{TssPeer, TssPeerServer},
+    KeygenInit, KeygenOutput, MessageIn, MessageOut, SignInit, TrafficIn, TrafficOut,
 };
 mod narwhal {
     #![allow(clippy::derive_partial_eq_without_eq)]

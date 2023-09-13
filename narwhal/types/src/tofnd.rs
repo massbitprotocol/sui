@@ -16,7 +16,17 @@ pub struct KeyPresenceResponse {
 }
 /// Nested message and enum types in `KeyPresenceResponse`.
 pub mod key_presence_response {
-    #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
+    #[derive(
+        Clone,
+        Copy,
+        Debug,
+        PartialEq,
+        Eq,
+        Hash,
+        PartialOrd,
+        Ord,
+        ::prost::Enumeration
+    )]
     #[repr(i32)]
     pub enum Response {
         Unspecified = 0,
@@ -65,7 +75,17 @@ pub struct RecoverResponse {
 }
 /// Nested message and enum types in `RecoverResponse`.
 pub mod recover_response {
-    #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
+    #[derive(
+        Clone,
+        Copy,
+        Debug,
+        PartialEq,
+        Eq,
+        Hash,
+        PartialOrd,
+        Ord,
+        ::prost::Enumeration
+    )]
     #[repr(i32)]
     pub enum Response {
         Unspecified = 0,
@@ -205,7 +225,15 @@ pub mod message_out {
         /// Nested message and enum types in `Criminal`.
         pub mod criminal {
             #[derive(
-                Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration,
+                Clone,
+                Copy,
+                Debug,
+                PartialEq,
+                Eq,
+                Hash,
+                PartialOrd,
+                Ord,
+                ::prost::Enumeration
             )]
             #[repr(i32)]
             pub enum CrimeType {
@@ -306,8 +334,8 @@ pub struct SignInit {
 /// Generated client implementations.
 pub mod gg20_client {
     #![allow(unused_variables, dead_code, missing_docs, clippy::let_unit_value)]
-    use tonic::codegen::http::Uri;
     use tonic::codegen::*;
+    use tonic::codegen::http::Uri;
     /// GG20 is the protocol https://eprint.iacr.org/2020/540
     /// rpc definitions intended to wrap the API for this library: https://github.com/axelarnetwork/tofn
     #[derive(Debug, Clone)]
@@ -340,7 +368,10 @@ pub mod gg20_client {
             let inner = tonic::client::Grpc::with_origin(inner, origin);
             Self { inner }
         }
-        pub fn with_interceptor<F>(inner: T, interceptor: F) -> Gg20Client<InterceptedService<T, F>>
+        pub fn with_interceptor<F>(
+            inner: T,
+            interceptor: F,
+        ) -> Gg20Client<InterceptedService<T, F>>
         where
             F: tonic::service::Interceptor,
             T::ResponseBody: Default,
@@ -350,8 +381,9 @@ pub mod gg20_client {
                     <T as tonic::client::GrpcService<tonic::body::BoxBody>>::ResponseBody,
                 >,
             >,
-            <T as tonic::codegen::Service<http::Request<tonic::body::BoxBody>>>::Error:
-                Into<StdError> + Send + Sync,
+            <T as tonic::codegen::Service<
+                http::Request<tonic::body::BoxBody>,
+            >>::Error: Into<StdError> + Send + Sync,
         {
             Gg20Client::new(InterceptedService::new(inner, interceptor))
         }
@@ -389,18 +421,23 @@ pub mod gg20_client {
         pub async fn recover(
             &mut self,
             request: impl tonic::IntoRequest<super::RecoverRequest>,
-        ) -> std::result::Result<tonic::Response<super::RecoverResponse>, tonic::Status> {
-            self.inner.ready().await.map_err(|e| {
-                tonic::Status::new(
-                    tonic::Code::Unknown,
-                    format!("Service was not ready: {}", e.into()),
-                )
-            })?;
+        ) -> std::result::Result<
+            tonic::Response<super::RecoverResponse>,
+            tonic::Status,
+        > {
+            self.inner
+                .ready()
+                .await
+                .map_err(|e| {
+                    tonic::Status::new(
+                        tonic::Code::Unknown,
+                        format!("Service was not ready: {}", e.into()),
+                    )
+                })?;
             let codec = tonic::codec::ProstCodec::default();
             let path = http::uri::PathAndQuery::from_static("/tofnd.GG20/Recover");
             let mut req = request.into_request();
-            req.extensions_mut()
-                .insert(GrpcMethod::new("tofnd.GG20", "Recover"));
+            req.extensions_mut().insert(GrpcMethod::new("tofnd.GG20", "Recover"));
             self.inner.unary(req, path, codec).await
         }
         pub async fn keygen(
@@ -410,17 +447,19 @@ pub mod gg20_client {
             tonic::Response<tonic::codec::Streaming<super::MessageOut>>,
             tonic::Status,
         > {
-            self.inner.ready().await.map_err(|e| {
-                tonic::Status::new(
-                    tonic::Code::Unknown,
-                    format!("Service was not ready: {}", e.into()),
-                )
-            })?;
+            self.inner
+                .ready()
+                .await
+                .map_err(|e| {
+                    tonic::Status::new(
+                        tonic::Code::Unknown,
+                        format!("Service was not ready: {}", e.into()),
+                    )
+                })?;
             let codec = tonic::codec::ProstCodec::default();
             let path = http::uri::PathAndQuery::from_static("/tofnd.GG20/Keygen");
             let mut req = request.into_streaming_request();
-            req.extensions_mut()
-                .insert(GrpcMethod::new("tofnd.GG20", "Keygen"));
+            req.extensions_mut().insert(GrpcMethod::new("tofnd.GG20", "Keygen"));
             self.inner.streaming(req, path, codec).await
         }
         pub async fn sign(
@@ -430,35 +469,41 @@ pub mod gg20_client {
             tonic::Response<tonic::codec::Streaming<super::MessageOut>>,
             tonic::Status,
         > {
-            self.inner.ready().await.map_err(|e| {
-                tonic::Status::new(
-                    tonic::Code::Unknown,
-                    format!("Service was not ready: {}", e.into()),
-                )
-            })?;
+            self.inner
+                .ready()
+                .await
+                .map_err(|e| {
+                    tonic::Status::new(
+                        tonic::Code::Unknown,
+                        format!("Service was not ready: {}", e.into()),
+                    )
+                })?;
             let codec = tonic::codec::ProstCodec::default();
             let path = http::uri::PathAndQuery::from_static("/tofnd.GG20/Sign");
             let mut req = request.into_streaming_request();
-            req.extensions_mut()
-                .insert(GrpcMethod::new("tofnd.GG20", "Sign"));
+            req.extensions_mut().insert(GrpcMethod::new("tofnd.GG20", "Sign"));
             self.inner.streaming(req, path, codec).await
         }
         pub async fn key_presence(
             &mut self,
             request: impl tonic::IntoRequest<super::KeyPresenceRequest>,
-        ) -> std::result::Result<tonic::Response<super::KeyPresenceResponse>, tonic::Status>
-        {
-            self.inner.ready().await.map_err(|e| {
-                tonic::Status::new(
-                    tonic::Code::Unknown,
-                    format!("Service was not ready: {}", e.into()),
-                )
-            })?;
+        ) -> std::result::Result<
+            tonic::Response<super::KeyPresenceResponse>,
+            tonic::Status,
+        > {
+            self.inner
+                .ready()
+                .await
+                .map_err(|e| {
+                    tonic::Status::new(
+                        tonic::Code::Unknown,
+                        format!("Service was not ready: {}", e.into()),
+                    )
+                })?;
             let codec = tonic::codec::ProstCodec::default();
             let path = http::uri::PathAndQuery::from_static("/tofnd.GG20/KeyPresence");
             let mut req = request.into_request();
-            req.extensions_mut()
-                .insert(GrpcMethod::new("tofnd.GG20", "KeyPresence"));
+            req.extensions_mut().insert(GrpcMethod::new("tofnd.GG20", "KeyPresence"));
             self.inner.unary(req, path, codec).await
         }
     }
@@ -475,7 +520,9 @@ pub mod gg20_server {
             request: tonic::Request<super::RecoverRequest>,
         ) -> std::result::Result<tonic::Response<super::RecoverResponse>, tonic::Status>;
         /// Server streaming response type for the Keygen method.
-        type KeygenStream: futures_core::Stream<Item = std::result::Result<super::MessageOut, tonic::Status>>
+        type KeygenStream: futures_core::Stream<
+                Item = std::result::Result<super::MessageOut, tonic::Status>,
+            >
             + Send
             + 'static;
         async fn keygen(
@@ -483,7 +530,9 @@ pub mod gg20_server {
             request: tonic::Request<tonic::Streaming<super::MessageIn>>,
         ) -> std::result::Result<tonic::Response<Self::KeygenStream>, tonic::Status>;
         /// Server streaming response type for the Sign method.
-        type SignStream: futures_core::Stream<Item = std::result::Result<super::MessageOut, tonic::Status>>
+        type SignStream: futures_core::Stream<
+                Item = std::result::Result<super::MessageOut, tonic::Status>,
+            >
             + Send
             + 'static;
         async fn sign(
@@ -493,7 +542,10 @@ pub mod gg20_server {
         async fn key_presence(
             &self,
             request: tonic::Request<super::KeyPresenceRequest>,
-        ) -> std::result::Result<tonic::Response<super::KeyPresenceResponse>, tonic::Status>;
+        ) -> std::result::Result<
+            tonic::Response<super::KeyPresenceResponse>,
+            tonic::Status,
+        >;
     }
     /// GG20 is the protocol https://eprint.iacr.org/2020/540
     /// rpc definitions intended to wrap the API for this library: https://github.com/axelarnetwork/tofn
@@ -520,7 +572,10 @@ pub mod gg20_server {
                 max_encoding_message_size: None,
             }
         }
-        pub fn with_interceptor<F>(inner: T, interceptor: F) -> InterceptedService<Self, F>
+        pub fn with_interceptor<F>(
+            inner: T,
+            interceptor: F,
+        ) -> InterceptedService<Self, F>
         where
             F: tonic::service::Interceptor,
         {
@@ -576,9 +631,13 @@ pub mod gg20_server {
                 "/tofnd.GG20/Recover" => {
                     #[allow(non_camel_case_types)]
                     struct RecoverSvc<T: Gg20>(pub Arc<T>);
-                    impl<T: Gg20> tonic::server::UnaryService<super::RecoverRequest> for RecoverSvc<T> {
+                    impl<T: Gg20> tonic::server::UnaryService<super::RecoverRequest>
+                    for RecoverSvc<T> {
                         type Response = super::RecoverResponse;
-                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
+                        type Future = BoxFuture<
+                            tonic::Response<Self::Response>,
+                            tonic::Status,
+                        >;
                         fn call(
                             &mut self,
                             request: tonic::Request<super::RecoverRequest>,
@@ -614,11 +673,14 @@ pub mod gg20_server {
                 "/tofnd.GG20/Keygen" => {
                     #[allow(non_camel_case_types)]
                     struct KeygenSvc<T: Gg20>(pub Arc<T>);
-                    impl<T: Gg20> tonic::server::StreamingService<super::MessageIn> for KeygenSvc<T> {
+                    impl<T: Gg20> tonic::server::StreamingService<super::MessageIn>
+                    for KeygenSvc<T> {
                         type Response = super::MessageOut;
                         type ResponseStream = T::KeygenStream;
-                        type Future =
-                            BoxFuture<tonic::Response<Self::ResponseStream>, tonic::Status>;
+                        type Future = BoxFuture<
+                            tonic::Response<Self::ResponseStream>,
+                            tonic::Status,
+                        >;
                         fn call(
                             &mut self,
                             request: tonic::Request<tonic::Streaming<super::MessageIn>>,
@@ -654,11 +716,14 @@ pub mod gg20_server {
                 "/tofnd.GG20/Sign" => {
                     #[allow(non_camel_case_types)]
                     struct SignSvc<T: Gg20>(pub Arc<T>);
-                    impl<T: Gg20> tonic::server::StreamingService<super::MessageIn> for SignSvc<T> {
+                    impl<T: Gg20> tonic::server::StreamingService<super::MessageIn>
+                    for SignSvc<T> {
                         type Response = super::MessageOut;
                         type ResponseStream = T::SignStream;
-                        type Future =
-                            BoxFuture<tonic::Response<Self::ResponseStream>, tonic::Status>;
+                        type Future = BoxFuture<
+                            tonic::Response<Self::ResponseStream>,
+                            tonic::Status,
+                        >;
                         fn call(
                             &mut self,
                             request: tonic::Request<tonic::Streaming<super::MessageIn>>,
@@ -694,15 +759,21 @@ pub mod gg20_server {
                 "/tofnd.GG20/KeyPresence" => {
                     #[allow(non_camel_case_types)]
                     struct KeyPresenceSvc<T: Gg20>(pub Arc<T>);
-                    impl<T: Gg20> tonic::server::UnaryService<super::KeyPresenceRequest> for KeyPresenceSvc<T> {
+                    impl<T: Gg20> tonic::server::UnaryService<super::KeyPresenceRequest>
+                    for KeyPresenceSvc<T> {
                         type Response = super::KeyPresenceResponse;
-                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
+                        type Future = BoxFuture<
+                            tonic::Response<Self::Response>,
+                            tonic::Status,
+                        >;
                         fn call(
                             &mut self,
                             request: tonic::Request<super::KeyPresenceRequest>,
                         ) -> Self::Future {
                             let inner = Arc::clone(&self.0);
-                            let fut = async move { (*inner).key_presence(request).await };
+                            let fut = async move {
+                                (*inner).key_presence(request).await
+                            };
                             Box::pin(fut)
                         }
                     }
@@ -729,14 +800,18 @@ pub mod gg20_server {
                     };
                     Box::pin(fut)
                 }
-                _ => Box::pin(async move {
-                    Ok(http::Response::builder()
-                        .status(200)
-                        .header("grpc-status", "12")
-                        .header("content-type", "application/grpc")
-                        .body(empty_body())
-                        .unwrap())
-                }),
+                _ => {
+                    Box::pin(async move {
+                        Ok(
+                            http::Response::builder()
+                                .status(200)
+                                .header("grpc-status", "12")
+                                .header("content-type", "application/grpc")
+                                .body(empty_body())
+                                .unwrap(),
+                        )
+                    })
+                }
             }
         }
     }
@@ -764,452 +839,5 @@ pub mod gg20_server {
     }
     impl<T: Gg20> tonic::server::NamedService for Gg20Server<T> {
         const NAME: &'static str = "tofnd.GG20";
-    }
-}
-#[allow(clippy::derive_partial_eq_without_eq)]
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct KeygenRequest {
-    #[prost(string, tag = "1")]
-    pub key_uid: ::prost::alloc::string::String,
-    /// used only for logging
-    #[prost(string, tag = "2")]
-    pub party_uid: ::prost::alloc::string::String,
-}
-#[allow(clippy::derive_partial_eq_without_eq)]
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct KeygenResponse {
-    #[prost(oneof = "keygen_response::KeygenResponse", tags = "1, 2")]
-    pub keygen_response: ::core::option::Option<keygen_response::KeygenResponse>,
-}
-/// Nested message and enum types in `KeygenResponse`.
-pub mod keygen_response {
-    #[allow(clippy::derive_partial_eq_without_eq)]
-    #[derive(Clone, PartialEq, ::prost::Oneof)]
-    pub enum KeygenResponse {
-        /// SEC1-encoded compressed curve point
-        #[prost(bytes, tag = "1")]
-        PubKey(::prost::alloc::vec::Vec<u8>),
-        /// reply with an error message if keygen fails
-        #[prost(string, tag = "2")]
-        Error(::prost::alloc::string::String),
-    }
-}
-#[allow(clippy::derive_partial_eq_without_eq)]
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct SignRequest {
-    #[prost(string, tag = "1")]
-    pub key_uid: ::prost::alloc::string::String,
-    /// 32-byte pre-hashed message digest
-    #[prost(bytes = "vec", tag = "2")]
-    pub msg_to_sign: ::prost::alloc::vec::Vec<u8>,
-    /// used only for logging
-    #[prost(string, tag = "3")]
-    pub party_uid: ::prost::alloc::string::String,
-    /// SEC1-encoded compressed pub key bytes to find the right mnemonic. Latest is used, if empty.
-    #[prost(bytes = "vec", tag = "4")]
-    pub pub_key: ::prost::alloc::vec::Vec<u8>,
-}
-#[allow(clippy::derive_partial_eq_without_eq)]
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct SignResponse {
-    #[prost(oneof = "sign_response::SignResponse", tags = "1, 2")]
-    pub sign_response: ::core::option::Option<sign_response::SignResponse>,
-}
-/// Nested message and enum types in `SignResponse`.
-pub mod sign_response {
-    #[allow(clippy::derive_partial_eq_without_eq)]
-    #[derive(Clone, PartialEq, ::prost::Oneof)]
-    pub enum SignResponse {
-        /// ASN.1 DER-encoded ECDSA signature
-        #[prost(bytes, tag = "1")]
-        Signature(::prost::alloc::vec::Vec<u8>),
-        /// reply with an error message if sign fails
-        #[prost(string, tag = "2")]
-        Error(::prost::alloc::string::String),
-    }
-}
-/// Generated client implementations.
-pub mod multisig_client {
-    #![allow(unused_variables, dead_code, missing_docs, clippy::let_unit_value)]
-    use tonic::codegen::http::Uri;
-    use tonic::codegen::*;
-    #[derive(Debug, Clone)]
-    pub struct MultisigClient<T> {
-        inner: tonic::client::Grpc<T>,
-    }
-    impl MultisigClient<tonic::transport::Channel> {
-        /// Attempt to create a new client by connecting to a given endpoint.
-        pub async fn connect<D>(dst: D) -> Result<Self, tonic::transport::Error>
-        where
-            D: TryInto<tonic::transport::Endpoint>,
-            D::Error: Into<StdError>,
-        {
-            let conn = tonic::transport::Endpoint::new(dst)?.connect().await?;
-            Ok(Self::new(conn))
-        }
-    }
-    impl<T> MultisigClient<T>
-    where
-        T: tonic::client::GrpcService<tonic::body::BoxBody>,
-        T::Error: Into<StdError>,
-        T::ResponseBody: Body<Data = Bytes> + Send + 'static,
-        <T::ResponseBody as Body>::Error: Into<StdError> + Send,
-    {
-        pub fn new(inner: T) -> Self {
-            let inner = tonic::client::Grpc::new(inner);
-            Self { inner }
-        }
-        pub fn with_origin(inner: T, origin: Uri) -> Self {
-            let inner = tonic::client::Grpc::with_origin(inner, origin);
-            Self { inner }
-        }
-        pub fn with_interceptor<F>(
-            inner: T,
-            interceptor: F,
-        ) -> MultisigClient<InterceptedService<T, F>>
-        where
-            F: tonic::service::Interceptor,
-            T::ResponseBody: Default,
-            T: tonic::codegen::Service<
-                http::Request<tonic::body::BoxBody>,
-                Response = http::Response<
-                    <T as tonic::client::GrpcService<tonic::body::BoxBody>>::ResponseBody,
-                >,
-            >,
-            <T as tonic::codegen::Service<http::Request<tonic::body::BoxBody>>>::Error:
-                Into<StdError> + Send + Sync,
-        {
-            MultisigClient::new(InterceptedService::new(inner, interceptor))
-        }
-        /// Compress requests with the given encoding.
-        ///
-        /// This requires the server to support it otherwise it might respond with an
-        /// error.
-        #[must_use]
-        pub fn send_compressed(mut self, encoding: CompressionEncoding) -> Self {
-            self.inner = self.inner.send_compressed(encoding);
-            self
-        }
-        /// Enable decompressing responses.
-        #[must_use]
-        pub fn accept_compressed(mut self, encoding: CompressionEncoding) -> Self {
-            self.inner = self.inner.accept_compressed(encoding);
-            self
-        }
-        /// Limits the maximum size of a decoded message.
-        ///
-        /// Default: `4MB`
-        #[must_use]
-        pub fn max_decoding_message_size(mut self, limit: usize) -> Self {
-            self.inner = self.inner.max_decoding_message_size(limit);
-            self
-        }
-        /// Limits the maximum size of an encoded message.
-        ///
-        /// Default: `usize::MAX`
-        #[must_use]
-        pub fn max_encoding_message_size(mut self, limit: usize) -> Self {
-            self.inner = self.inner.max_encoding_message_size(limit);
-            self
-        }
-        pub async fn key_presence(
-            &mut self,
-            request: impl tonic::IntoRequest<super::KeyPresenceRequest>,
-        ) -> std::result::Result<tonic::Response<super::KeyPresenceResponse>, tonic::Status>
-        {
-            self.inner.ready().await.map_err(|e| {
-                tonic::Status::new(
-                    tonic::Code::Unknown,
-                    format!("Service was not ready: {}", e.into()),
-                )
-            })?;
-            let codec = tonic::codec::ProstCodec::default();
-            let path = http::uri::PathAndQuery::from_static("/tofnd.Multisig/KeyPresence");
-            let mut req = request.into_request();
-            req.extensions_mut()
-                .insert(GrpcMethod::new("tofnd.Multisig", "KeyPresence"));
-            self.inner.unary(req, path, codec).await
-        }
-        pub async fn keygen(
-            &mut self,
-            request: impl tonic::IntoRequest<super::KeygenRequest>,
-        ) -> std::result::Result<tonic::Response<super::KeygenResponse>, tonic::Status> {
-            self.inner.ready().await.map_err(|e| {
-                tonic::Status::new(
-                    tonic::Code::Unknown,
-                    format!("Service was not ready: {}", e.into()),
-                )
-            })?;
-            let codec = tonic::codec::ProstCodec::default();
-            let path = http::uri::PathAndQuery::from_static("/tofnd.Multisig/Keygen");
-            let mut req = request.into_request();
-            req.extensions_mut()
-                .insert(GrpcMethod::new("tofnd.Multisig", "Keygen"));
-            self.inner.unary(req, path, codec).await
-        }
-        pub async fn sign(
-            &mut self,
-            request: impl tonic::IntoRequest<super::SignRequest>,
-        ) -> std::result::Result<tonic::Response<super::SignResponse>, tonic::Status> {
-            self.inner.ready().await.map_err(|e| {
-                tonic::Status::new(
-                    tonic::Code::Unknown,
-                    format!("Service was not ready: {}", e.into()),
-                )
-            })?;
-            let codec = tonic::codec::ProstCodec::default();
-            let path = http::uri::PathAndQuery::from_static("/tofnd.Multisig/Sign");
-            let mut req = request.into_request();
-            req.extensions_mut()
-                .insert(GrpcMethod::new("tofnd.Multisig", "Sign"));
-            self.inner.unary(req, path, codec).await
-        }
-    }
-}
-/// Generated server implementations.
-pub mod multisig_server {
-    #![allow(unused_variables, dead_code, missing_docs, clippy::let_unit_value)]
-    use tonic::codegen::*;
-    /// Generated trait containing gRPC methods that should be implemented for use with MultisigServer.
-    #[async_trait]
-    pub trait Multisig: Send + Sync + 'static {
-        async fn key_presence(
-            &self,
-            request: tonic::Request<super::KeyPresenceRequest>,
-        ) -> std::result::Result<tonic::Response<super::KeyPresenceResponse>, tonic::Status>;
-        async fn keygen(
-            &self,
-            request: tonic::Request<super::KeygenRequest>,
-        ) -> std::result::Result<tonic::Response<super::KeygenResponse>, tonic::Status>;
-        async fn sign(
-            &self,
-            request: tonic::Request<super::SignRequest>,
-        ) -> std::result::Result<tonic::Response<super::SignResponse>, tonic::Status>;
-    }
-    #[derive(Debug)]
-    pub struct MultisigServer<T: Multisig> {
-        inner: _Inner<T>,
-        accept_compression_encodings: EnabledCompressionEncodings,
-        send_compression_encodings: EnabledCompressionEncodings,
-        max_decoding_message_size: Option<usize>,
-        max_encoding_message_size: Option<usize>,
-    }
-    struct _Inner<T>(Arc<T>);
-    impl<T: Multisig> MultisigServer<T> {
-        pub fn new(inner: T) -> Self {
-            Self::from_arc(Arc::new(inner))
-        }
-        pub fn from_arc(inner: Arc<T>) -> Self {
-            let inner = _Inner(inner);
-            Self {
-                inner,
-                accept_compression_encodings: Default::default(),
-                send_compression_encodings: Default::default(),
-                max_decoding_message_size: None,
-                max_encoding_message_size: None,
-            }
-        }
-        pub fn with_interceptor<F>(inner: T, interceptor: F) -> InterceptedService<Self, F>
-        where
-            F: tonic::service::Interceptor,
-        {
-            InterceptedService::new(Self::new(inner), interceptor)
-        }
-        /// Enable decompressing requests with the given encoding.
-        #[must_use]
-        pub fn accept_compressed(mut self, encoding: CompressionEncoding) -> Self {
-            self.accept_compression_encodings.enable(encoding);
-            self
-        }
-        /// Compress responses with the given encoding, if the client supports it.
-        #[must_use]
-        pub fn send_compressed(mut self, encoding: CompressionEncoding) -> Self {
-            self.send_compression_encodings.enable(encoding);
-            self
-        }
-        /// Limits the maximum size of a decoded message.
-        ///
-        /// Default: `4MB`
-        #[must_use]
-        pub fn max_decoding_message_size(mut self, limit: usize) -> Self {
-            self.max_decoding_message_size = Some(limit);
-            self
-        }
-        /// Limits the maximum size of an encoded message.
-        ///
-        /// Default: `usize::MAX`
-        #[must_use]
-        pub fn max_encoding_message_size(mut self, limit: usize) -> Self {
-            self.max_encoding_message_size = Some(limit);
-            self
-        }
-    }
-    impl<T, B> tonic::codegen::Service<http::Request<B>> for MultisigServer<T>
-    where
-        T: Multisig,
-        B: Body + Send + 'static,
-        B::Error: Into<StdError> + Send + 'static,
-    {
-        type Response = http::Response<tonic::body::BoxBody>;
-        type Error = std::convert::Infallible;
-        type Future = BoxFuture<Self::Response, Self::Error>;
-        fn poll_ready(
-            &mut self,
-            _cx: &mut Context<'_>,
-        ) -> Poll<std::result::Result<(), Self::Error>> {
-            Poll::Ready(Ok(()))
-        }
-        fn call(&mut self, req: http::Request<B>) -> Self::Future {
-            let inner = self.inner.clone();
-            match req.uri().path() {
-                "/tofnd.Multisig/KeyPresence" => {
-                    #[allow(non_camel_case_types)]
-                    struct KeyPresenceSvc<T: Multisig>(pub Arc<T>);
-                    impl<T: Multisig> tonic::server::UnaryService<super::KeyPresenceRequest> for KeyPresenceSvc<T> {
-                        type Response = super::KeyPresenceResponse;
-                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
-                        fn call(
-                            &mut self,
-                            request: tonic::Request<super::KeyPresenceRequest>,
-                        ) -> Self::Future {
-                            let inner = Arc::clone(&self.0);
-                            let fut = async move { (*inner).key_presence(request).await };
-                            Box::pin(fut)
-                        }
-                    }
-                    let accept_compression_encodings = self.accept_compression_encodings;
-                    let send_compression_encodings = self.send_compression_encodings;
-                    let max_decoding_message_size = self.max_decoding_message_size;
-                    let max_encoding_message_size = self.max_encoding_message_size;
-                    let inner = self.inner.clone();
-                    let fut = async move {
-                        let inner = inner.0;
-                        let method = KeyPresenceSvc(inner);
-                        let codec = tonic::codec::ProstCodec::default();
-                        let mut grpc = tonic::server::Grpc::new(codec)
-                            .apply_compression_config(
-                                accept_compression_encodings,
-                                send_compression_encodings,
-                            )
-                            .apply_max_message_size_config(
-                                max_decoding_message_size,
-                                max_encoding_message_size,
-                            );
-                        let res = grpc.unary(method, req).await;
-                        Ok(res)
-                    };
-                    Box::pin(fut)
-                }
-                "/tofnd.Multisig/Keygen" => {
-                    #[allow(non_camel_case_types)]
-                    struct KeygenSvc<T: Multisig>(pub Arc<T>);
-                    impl<T: Multisig> tonic::server::UnaryService<super::KeygenRequest> for KeygenSvc<T> {
-                        type Response = super::KeygenResponse;
-                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
-                        fn call(
-                            &mut self,
-                            request: tonic::Request<super::KeygenRequest>,
-                        ) -> Self::Future {
-                            let inner = Arc::clone(&self.0);
-                            let fut = async move { (*inner).keygen(request).await };
-                            Box::pin(fut)
-                        }
-                    }
-                    let accept_compression_encodings = self.accept_compression_encodings;
-                    let send_compression_encodings = self.send_compression_encodings;
-                    let max_decoding_message_size = self.max_decoding_message_size;
-                    let max_encoding_message_size = self.max_encoding_message_size;
-                    let inner = self.inner.clone();
-                    let fut = async move {
-                        let inner = inner.0;
-                        let method = KeygenSvc(inner);
-                        let codec = tonic::codec::ProstCodec::default();
-                        let mut grpc = tonic::server::Grpc::new(codec)
-                            .apply_compression_config(
-                                accept_compression_encodings,
-                                send_compression_encodings,
-                            )
-                            .apply_max_message_size_config(
-                                max_decoding_message_size,
-                                max_encoding_message_size,
-                            );
-                        let res = grpc.unary(method, req).await;
-                        Ok(res)
-                    };
-                    Box::pin(fut)
-                }
-                "/tofnd.Multisig/Sign" => {
-                    #[allow(non_camel_case_types)]
-                    struct SignSvc<T: Multisig>(pub Arc<T>);
-                    impl<T: Multisig> tonic::server::UnaryService<super::SignRequest> for SignSvc<T> {
-                        type Response = super::SignResponse;
-                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
-                        fn call(
-                            &mut self,
-                            request: tonic::Request<super::SignRequest>,
-                        ) -> Self::Future {
-                            let inner = Arc::clone(&self.0);
-                            let fut = async move { (*inner).sign(request).await };
-                            Box::pin(fut)
-                        }
-                    }
-                    let accept_compression_encodings = self.accept_compression_encodings;
-                    let send_compression_encodings = self.send_compression_encodings;
-                    let max_decoding_message_size = self.max_decoding_message_size;
-                    let max_encoding_message_size = self.max_encoding_message_size;
-                    let inner = self.inner.clone();
-                    let fut = async move {
-                        let inner = inner.0;
-                        let method = SignSvc(inner);
-                        let codec = tonic::codec::ProstCodec::default();
-                        let mut grpc = tonic::server::Grpc::new(codec)
-                            .apply_compression_config(
-                                accept_compression_encodings,
-                                send_compression_encodings,
-                            )
-                            .apply_max_message_size_config(
-                                max_decoding_message_size,
-                                max_encoding_message_size,
-                            );
-                        let res = grpc.unary(method, req).await;
-                        Ok(res)
-                    };
-                    Box::pin(fut)
-                }
-                _ => Box::pin(async move {
-                    Ok(http::Response::builder()
-                        .status(200)
-                        .header("grpc-status", "12")
-                        .header("content-type", "application/grpc")
-                        .body(empty_body())
-                        .unwrap())
-                }),
-            }
-        }
-    }
-    impl<T: Multisig> Clone for MultisigServer<T> {
-        fn clone(&self) -> Self {
-            let inner = self.inner.clone();
-            Self {
-                inner,
-                accept_compression_encodings: self.accept_compression_encodings,
-                send_compression_encodings: self.send_compression_encodings,
-                max_decoding_message_size: self.max_decoding_message_size,
-                max_encoding_message_size: self.max_encoding_message_size,
-            }
-        }
-    }
-    impl<T: Multisig> Clone for _Inner<T> {
-        fn clone(&self) -> Self {
-            Self(Arc::clone(&self.0))
-        }
-    }
-    impl<T: std::fmt::Debug> std::fmt::Debug for _Inner<T> {
-        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-            write!(f, "{:?}", self.0)
-        }
-    }
-    impl<T: Multisig> tonic::server::NamedService for MultisigServer<T> {
-        const NAME: &'static str = "tofnd.Multisig";
     }
 }

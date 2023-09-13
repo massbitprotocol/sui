@@ -23,7 +23,9 @@ services:
     # populate your local ./fullnode/config/ directory with fullnode.yaml and genesis.blob for the network you want to use.
     volumes:
       - ../..:/sui
-      - ./validator/build.sh:/sui/build.sh
+      - ../../../tofnd:/tofnd
+      - ../../../tofn:/tofn
+      - ./validator/build.sh:/build.sh
       - ./validator/debug:/sui/target/debug:rw
       - ./validator/release:/sui/target/release:rw
 
