@@ -33,6 +33,7 @@ tower.workspace = true
 tracing.workspace = true
 tap.workspace = true
 uuid.workspace = true
+k256 = { version = "0.13" }
 
 consensus = { path = "../consensus", package = "narwhal-consensus" }
 fastcrypto.workspace = true
@@ -70,6 +71,6 @@ worker = { path = "../worker", package = "narwhal-worker" }
 storage = { path = "../storage", package = "narwhal-storage" }
 reqwest.workspace = true
 telemetry-subscribers.workspace = true
-hash32 = "0.3.1"
+
 [features]
 benchmark = []

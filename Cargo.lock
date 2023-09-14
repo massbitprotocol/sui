@@ -6986,6 +6986,7 @@ dependencies = [
  "governor",
  "indexmap 1.9.3",
  "itertools 0.10.5",
+ "k256 0.13.1",
  "mockall",
  "mysten-common",
  "mysten-metrics",
