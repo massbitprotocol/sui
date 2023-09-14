@@ -3,13 +3,17 @@ use crate::RelayerConfigs;
 use crate::{NAMESPACE, NUM_SHUTDOWN_RECEIVERS};
 use anemo::PeerId;
 use anyhow::anyhow;
+use arc_swap::Guard;
 use ethers::prelude::*;
 use eyre;
+use fastcrypto::bls12381::min_sig::BLS12381PublicKey;
 use fastcrypto::traits::KeyPair as _;
 use futures::future::try_join_all;
 use futures::stream::FuturesUnordered;
 use futures::Stream;
+use k256::schnorr::signature::KeypairRef;
 use mysten_metrics::{RegistryID, RegistryService};
+use narwhal_config::committee;
 use narwhal_config::{Committee, Parameters, WorkerCache};
 use narwhal_crypto::{KeyPair, NetworkKeyPair, PublicKey};
 use narwhal_executor::{ExecutionState, SubscriberResult};
@@ -24,14 +28,103 @@ use std::fs;
 use std::sync::Arc;
 use std::time::Instant;
 use sui_protocol_config::ProtocolConfig;
+use tokio::sync::Mutex;
 use tokio::sync::RwLock;
 use tokio::task::JoinHandle;
+use tonic::transport::Channel;
 use tonic::Status;
 use tracing::field::AsField;
-use tracing::{info, instrument};
+use tracing::{debug, info, instrument, warn};
 //use web3;
 //const WSS_URL: &str = "wss://eth-mainnet.g.alchemy.com/v2/9u1mZJtSKl2NgzRA9i0rh5_QIPQi4pTU";
 //const WSS_URL: &str = "wss://mainnet.infura.io/ws/v3/c60b0bb42f8a4c6481ecd229eddaca27";
+
+pub struct AnemoClient {
+    keypair: KeyPair,
+    // The private-public network key pair of this authority.
+    network_keypair: NetworkKeyPair,
+    // The committee information.
+    committee: Committee,
+    // The worker information cache.
+    worker_cache: WorkerCache,
+    remote_client: Option<TransactionsClient<Channel>>,
+    local_client: Option<Guard<Arc<LocalNarwhalClient>>>,
+}
+impl AnemoClient {
+    pub fn new(
+        keypair: KeyPair,
+        network_keypair: NetworkKeyPair,
+        committee: Committee,
+        worker_cache: WorkerCache,
+    ) -> Self {
+        Self {
+            keypair,
+            network_keypair,
+            committee,
+            worker_cache,
+            remote_client: None,
+            local_client: None,
+        }
+    }
+    pub async fn broadcast_block(&mut self, block: Block<H256>) {
+        info!("broadcast_block hash {:?}", &block.hash);
+        if let Some(hash) = block.hash {
+            let request = TransactionProto {
+                //transaction: Bytes::from(epoch.to_be_bytes().to_vec()),
+                transaction: tonic::codegen::Bytes::from(hash.as_bytes().to_vec()),
+            };
+            if let Some(client) = self.get_remote_client() {
+                let _ = client.submit_transaction(request).await;
+            }
+        }
+    }
+    fn get_remote_client(&mut self) -> Option<&mut TransactionsClient<Channel>> {
+        if self.remote_client.is_none() {
+            let name = self.keypair.public().clone();
+            let target = self
+                .worker_cache
+                .worker(&name, /* id */ &0)
+                .expect("Our key or worker id is not in the worker cache")
+                .transactions;
+            let config = mysten_network::config::Config::new();
+            let channel = config.connect_lazy(&target).unwrap();
+            //Remote client
+            self.remote_client = Some(TransactionsClient::new(channel));
+        }
+        return self.remote_client.as_mut();
+    }
+    fn create_local_client(&self) -> Guard<Arc<LocalNarwhalClient>> {
+        let name = self.keypair.public().clone();
+        let target = self
+            .worker_cache
+            .worker(&name, /* id */ &0)
+            .expect("Our key or worker id is not in the worker cache")
+            .transactions;
+        LocalNarwhalClient::get_global(&target).unwrap().load()
+    }
+    // async fn send_transaction(&self, trans: ScalarAbciRequest) {
+    //     println!(
+    //         "Call anemo client send_transaction {}",
+    //         String::from_utf8(trans.message.clone()).unwrap()
+    //     );
+    //     //Remote client
+    //     let mut remote_client = self.create_remote_client();
+    //     let mut local_client = self.create_local_client();
+    //     //let epoch = self.committee.epoch();
+    //     let request = TransactionProto {
+    //         //transaction: Bytes::from(epoch.to_be_bytes().to_vec()),
+    //         transaction: Bytes::from(trans.message),
+    //     };
+    //     // This transaciton must be ConsensusTransaction
+    //     //let result = local_client.submit_transaction(trans.message).await;
+    //     let result = remote_client.submit_transaction(request).await;
+    //     if result.is_ok() {
+    //         info!("ScalarAbciServer::AnemoClient send_transaction successfully");
+    //     } else {
+    //         debug!("ScalarAbciServer::AnemoClient send_transaction failed");
+    //     }
+    // }
+}
 pub struct EvmRelayerInner {
     // The configuration parameters.
     parameters: Parameters,
@@ -74,7 +167,7 @@ impl EvmRelayerInner {
         // create the channel to send the shutdown signal
         let mut tx_shutdown = PreSubscribedBroadcastSender::new(NUM_SHUTDOWN_RECEIVERS);
 
-        // spawn primary if not already running
+        // spawn relayer if not already running
         let handles = Self::spawn(
             keypair,
             network_keypair,
@@ -125,7 +218,7 @@ impl EvmRelayerInner {
         self.swap_registry(None);
 
         info!(
-            "Narwhal Grpc Node shutdown is complete - took {} seconds",
+            "Narwhal EVM Relayer Node shutdown is complete - took {} seconds",
             now.elapsed().as_secs_f64()
         );
     }
@@ -162,7 +255,7 @@ impl EvmRelayerInner {
         committee: Committee,
         // The worker information cache.
         worker_cache: WorkerCache,
-        // The configuration parameters.
+        // The configuration parameterspubkey.
         parameters: Parameters,
         // The state used by the client to execute transactions.
         execution_state: Arc<State>,
@@ -180,7 +273,7 @@ impl EvmRelayerInner {
         // Figure out the id for this authority
         let authority = committee
             .authority_by_key(&name)
-            .unwrap_or_else(|| panic!("Our node with key {:?} should be in committee", name));
+            .unwrap_or_else(|| panic!("Our node with key {:?} should be in committee", &name));
         // let mut rx_shutdown = tx_shutdown.subscribe();
 
         let relayer_config_dir =
@@ -198,12 +291,20 @@ impl EvmRelayerInner {
             })
             .expect(format!("Failed to read relayer config file {}", config_path).as_str());
         let relayer_configs: RelayerConfigs = toml::from_str(config_str.as_str()).unwrap();
+        let narwhal_client = Arc::new(Mutex::new(AnemoClient::new(
+            keypair,
+            network_keypair,
+            committee,
+            worker_cache,
+        )));
         //info!("Evm relayer config {}", config_str.as_str());
         let mut ws_handles = relayer_configs
             .scalar_relayer_evm
             .into_iter()
             .map(|config| {
                 let mut rx_shutdown = tx_shutdown.subscribe();
+                // Anemo client
+                let anemo_client = narwhal_client.clone();
                 tokio::spawn(async move {
                     // A Ws provider can be created from a ws(s) URI.
                     // In case of wss you must add the "rustls" or "openssl" feature
@@ -218,18 +319,31 @@ impl EvmRelayerInner {
 
                             let mut stream =
                                 provider.subscribe_blocks().await.expect("Cannot subscribe");
+                            let stream_id = stream.id;
                             loop {
-                                if let Ok(_) = rx_shutdown.receiver.recv().await {
-                                    info!("Received shutdown event. Quick current loop");
-                                    break;
-                                }
-                                if let Some(block) = stream.next().await {
-                                    //Received event from source chain
-                                    //Broadcast a poll
-                                    //Send it to the worker for create poll
-                                    info!("Received evm block {:?}", &block.hash);
+                                tokio::select! {
+                                    _ = rx_shutdown.receiver.recv() => {
+                                        warn!("EVM Relayer Node is shuting down");
+                                        break;
+                                    },
+                                    block = stream.next() => {
+                                        //Received event from source chain
+                                        //Broadcast a poll
+                                        //Send it to the worker for create poll
+                                        match block {
+                                            Some(block) => {
+                                                info!("Received evm block {:?}", &block.hash);
+                                                anemo_client.lock().await.broadcast_block(block).await;
+                                            },
+                                            None => {
+                                                info!("Data from stream is unavailable");
+                                            },
+                                        }                                       
+                                    }
                                 }
                             }
+                            let _ = provider.unsubscribe(stream_id);
+                            info!("Stop listen event from external chain");
                         }
                     }
                 })

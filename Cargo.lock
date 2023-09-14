@@ -9567,6 +9567,7 @@ version = "1.5.0"
 dependencies = [
  "anemo",
  "anyhow",
+ "arc-swap",
  "base64 0.20.0",
  "core",
  "dirs-next",
@@ -9583,6 +9584,7 @@ dependencies = [
  "jsonrpc-core",
  "lazy_static 1.4.0",
  "mysten-metrics",
+ "mysten-network",
  "narwhal-config",
  "narwhal-crypto",
  "narwhal-executor",
