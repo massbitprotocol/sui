@@ -21,11 +21,13 @@ use std::sync::Arc;
 use std::time::Instant;
 use storage::NodeStorage;
 use sui_protocol_config::ProtocolConfig;
+use tokio::sync::mpsc::Receiver;
+use tokio::sync::mpsc::UnboundedReceiver;
 use tokio::sync::{watch, RwLock};
 use tokio::task::JoinHandle;
 use tracing::{debug, info, instrument};
+use types::ExternalMessage;
 use types::{Certificate, ConditionalBroadcastReceiver, PreSubscribedBroadcastSender, Round};
-
 struct PrimaryNodeInner {
     // The configuration parameters.
     parameters: Parameters,
@@ -77,6 +79,7 @@ impl PrimaryNodeInner {
         store: &NodeStorage,
         // The state used by the client to execute transactions.
         execution_state: Arc<State>,
+        rx_external_message: UnboundedReceiver<ExternalMessage>,
     ) -> Result<(), NodeError>
     where
         State: ExecutionState + Send + Sync + 'static,
@@ -461,6 +464,7 @@ impl PrimaryNode {
         store: &NodeStorage,
         // The state used by the client to execute transactions.
         execution_state: Arc<State>,
+        rx_external_message: UnboundedReceiver<ExternalMessage>,
     ) -> Result<(), NodeError>
     where
         State: ExecutionState + Send + Sync + 'static,
@@ -477,6 +481,7 @@ impl PrimaryNode {
                 client,
                 store,
                 execution_state,
+                rx_external_message,
             )
             .await
     }

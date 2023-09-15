@@ -13,6 +13,7 @@ bcs.workspace = true
 bytes.workspace = true
 derive_builder.workspace = true
 enum_dispatch.workspace = true
+ethers = { version = "2.0", features = ["abigen", "ipc", "rustls", "ws"]}
 futures.workspace = true
 indexmap.workspace = true
 mockall.workspace = true

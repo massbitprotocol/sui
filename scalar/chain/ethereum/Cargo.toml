@@ -44,6 +44,7 @@ narwhal-config.workspace = true
 narwhal-crypto.workspace = true
 narwhal-executor.workspace = true
 narwhal-node.workspace = true
+narwhal-network.workspace = true
 narwhal-types.workspace = true
 narwhal-worker.workspace = true
 sui-protocol-config.workspace = true

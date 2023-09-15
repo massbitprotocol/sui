@@ -18,8 +18,8 @@ pub use proto::*;
 
 mod tss;
 pub use tss::*;
-// mod tofnd;
-// pub use tofnd::*;
+mod scalar;
+pub use scalar::*;
 
 mod worker;
 pub use worker::*;

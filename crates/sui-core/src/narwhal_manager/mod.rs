@@ -23,6 +23,7 @@ use std::sync::Arc;
 use std::time::Instant;
 use sui_protocol_config::{ProtocolConfig, ProtocolVersion};
 use sui_types::crypto::{AuthorityKeyPair, NetworkKeyPair};
+use tokio::sync::mpsc;
 use tokio::sync::Mutex;
 use tracing::info;
 #[derive(PartialEq)]
@@ -181,7 +182,9 @@ impl NarwhalManager {
         // start primary
         const MAX_PRIMARY_RETRIES: u32 = 2;
         let mut primary_retries = 0;
+        let mut tx_external_message = None;
         loop {
+            let (tx, rx) = mpsc::unbounded_channel();
             match self
                 .primary_node
                 .start(
@@ -193,10 +196,12 @@ impl NarwhalManager {
                     network_client.clone(),
                     &store,
                     execution_state.clone(),
+                    rx,
                 )
                 .await
             {
                 Ok(_) => {
+                    tx_external_message = Some(tx);
                     break;
                 }
                 Err(e) => {
@@ -221,7 +226,9 @@ impl NarwhalManager {
                     self.network_keypair.copy(),
                     committee.clone(),
                     worker_cache.clone(),
+                    network_client.clone(),
                     execution_state.clone(),
+                    tx_external_message.clone(),
                 )
                 .await
             {

@@ -17,7 +17,9 @@ use narwhal_config::committee;
 use narwhal_config::{Committee, Parameters, WorkerCache};
 use narwhal_crypto::{KeyPair, NetworkKeyPair, PublicKey};
 use narwhal_executor::{ExecutionState, SubscriberResult};
+use narwhal_network::client::NetworkClient;
 use narwhal_node::NodeError;
+use narwhal_types::ExternalMessage;
 use narwhal_types::TransactionProto;
 use narwhal_types::{PreSubscribedBroadcastSender, TransactionsClient};
 use narwhal_worker::LocalNarwhalClient;
@@ -28,6 +30,7 @@ use std::fs;
 use std::sync::Arc;
 use std::time::Instant;
 use sui_protocol_config::ProtocolConfig;
+use tokio::sync::mpsc::UnboundedSender;
 use tokio::sync::Mutex;
 use tokio::sync::RwLock;
 use tokio::task::JoinHandle;
@@ -150,8 +153,11 @@ impl EvmRelayerInner {
         committee: Committee,
         // The worker information cache.
         worker_cache: WorkerCache,
+        // Client for communications.
+        client: NetworkClient,
         // The state used by the client to execute transactions.
         execution_state: Arc<State>,
+        tx_external_message: UnboundedSender<ExternalMessage>,
     ) -> Result<(), anyhow::Error>
     where
         State: ExecutionState + Send + Sync + 'static,
@@ -173,10 +179,12 @@ impl EvmRelayerInner {
             network_keypair,
             committee,
             worker_cache,
+            client,
             self.parameters.clone(),
             execution_state,
             &registry.as_ref().unwrap(),
             &mut tx_shutdown,
+            tx_external_message,
         )
         .await?;
         // store the registry
@@ -255,6 +263,8 @@ impl EvmRelayerInner {
         committee: Committee,
         // The worker information cache.
         worker_cache: WorkerCache,
+        // Client for communications.
+        client: NetworkClient,
         // The configuration parameterspubkey.
         parameters: Parameters,
         // The state used by the client to execute transactions.
@@ -263,6 +273,7 @@ impl EvmRelayerInner {
         registry: &Registry,
         // The channel to send the shutdown signal
         tx_shutdown: &mut PreSubscribedBroadcastSender,
+        tx_external_message: UnboundedSender<ExternalMessage>,
     ) -> Result<Vec<JoinHandle<()>>, anyhow::Error>
     where
         State: ExecutionState + Send + Sync + 'static,
@@ -304,7 +315,9 @@ impl EvmRelayerInner {
             .map(|config| {
                 let mut rx_shutdown = tx_shutdown.subscribe();
                 // Anemo client
-                let anemo_client = narwhal_client.clone();
+                //let anemo_client = narwhal_client.clone();
+                let anemo_client = client.clone();
+                let tx = tx_external_message.clone();
                 tokio::spawn(async move {
                     // A Ws provider can be created from a ws(s) URI.
                     // In case of wss you must add the "rustls" or "openssl" feature
@@ -333,12 +346,15 @@ impl EvmRelayerInner {
                                         match block {
                                             Some(block) => {
                                                 info!("Received evm block {:?}", &block.hash);
-                                                anemo_client.lock().await.broadcast_block(block).await;
+                                                // let hash = block.hash.clone();
+                                                let external_message = ExternalMessage::new(block);
+                                                tx.send(external_message);
+                                                //anemo_client.lock().await.broadcast_block(block).await;
                                             },
                                             None => {
                                                 info!("Data from stream is unavailable");
                                             },
-                                        }                                       
+                                        }
                                     }
                                 }
                             }
@@ -381,8 +397,11 @@ impl EvmRelayer {
         committee: Committee,
         // The worker information cache.
         worker_cache: WorkerCache,
+        // Client for communications.
+        client: NetworkClient,
         // The state used by the client to execute transactions.
         execution_state: Arc<State>,
+        tx_external_message: Option<UnboundedSender<ExternalMessage>>,
     ) -> Result<(), anyhow::Error>
     where
         State: ExecutionState + Send + Sync + 'static,
@@ -394,7 +413,9 @@ impl EvmRelayer {
                 network_keypair,
                 committee,
                 worker_cache,
+                client,
                 execution_state,
+                tx_external_message.unwrap(),
             )
             .await
     }
