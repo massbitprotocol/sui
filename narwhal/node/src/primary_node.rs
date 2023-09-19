@@ -110,6 +110,7 @@ impl PrimaryNodeInner {
             execution_state,
             &registry,
             &mut tx_shutdown,
+            rx_external_message,
         )
         .await?;
 
@@ -215,6 +216,7 @@ impl PrimaryNodeInner {
         registry: &Registry,
         // The channel to send the shutdown signal
         tx_shutdown: &mut PreSubscribedBroadcastSender,
+        rx_external_message: UnboundedReceiver<ExternalMessage>,
     ) -> SubscriberResult<Vec<JoinHandle<()>>>
     where
         State: ExecutionState + Send + Sync + 'static,
@@ -316,6 +318,7 @@ impl PrimaryNodeInner {
             tx_committed_certificates,
             registry,
             leader_schedule,
+            rx_external_message,
         );
         handles.extend(primary_handles);
 

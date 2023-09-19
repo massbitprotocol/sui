@@ -14,10 +14,11 @@ use store::{rocks::DBMap, Map};
 use sui_protocol_config::ProtocolConfig;
 use tracing::{debug, trace};
 use types::{
-    now, validate_batch_version, Batch, BatchAPI, BatchDigest, FetchBatchesRequest,
-    FetchBatchesResponse, MetadataAPI, PrimaryToWorker, RequestBatchRequest, RequestBatchResponse,
-    RequestBatchesRequest, RequestBatchesResponse, WorkerBatchMessage, WorkerDeleteBatchesMessage,
-    WorkerOthersBatchMessage, WorkerSynchronizeMessage, WorkerToWorker, WorkerToWorkerClient,
+    now, validate_batch_version, Batch, BatchAPI, BatchDigest, CrossChainTransaction,
+    FetchBatchesRequest, FetchBatchesResponse, MetadataAPI, PrimaryToWorker, RequestBatchRequest,
+    RequestBatchResponse, RequestBatchesRequest, RequestBatchesResponse, WorkerBatchMessage,
+    WorkerDeleteBatchesMessage, WorkerOthersBatchMessage, WorkerSynchronizeMessage, WorkerToWorker,
+    WorkerToWorkerClient,
 };
 
 use crate::{batch_fetcher::BatchFetcher, TransactionValidator};
@@ -291,6 +292,43 @@ impl<V: TransactionValidator> PrimaryToWorker for PrimaryReceiverHandler<V> {
                 anemo::rpc::Status::internal(format!("failed to remove from batch store: {e:?}"))
             })?;
         }
+        Ok(anemo::Response::new(()))
+    }
+    async fn create_cross_chain_transaction(
+        &self,
+        request: anemo::Request<CrossChainTransaction>,
+    ) -> Result<anemo::Response<()>, anemo::rpc::Status> {
+        let message = request.into_body();
+        // if let Err(err) = self
+        //     .validator
+        //     .validate_batch(&message.batch, &self.protocol_config)
+        //     .await
+        // {
+        //     println!("report_batch {:?}", &message.batch);
+        //     return Err(anemo::rpc::Status::new_with_message(
+        //         StatusCode::BadRequest,
+        //         format!("Invalid batch: {err}"),
+        //     ));
+        // }
+        // let digest = message.batch.digest();
+
+        // let mut batch = message.batch.clone();
+
+        // // TODO: Remove once we have upgraded to protocol version 12.
+        // if self.protocol_config.narwhal_versioned_metadata() {
+        //     // Set received_at timestamp for remote batch.
+        //     batch.versioned_metadata_mut().set_received_at(now());
+        // }
+        // self.store.insert(&digest, &batch).map_err(|e| {
+        //     anemo::rpc::Status::internal(format!("failed to write to batch store: {e:?}"))
+        // })?;
+        // self.client
+        //     .report_others_batch(WorkerOthersBatchMessage {
+        //         digest,
+        //         worker_id: self.id,
+        //     })
+        //     .await
+        //     .map_err(|e| anemo::rpc::Status::internal(e.to_string()))?;
         Ok(anemo::Response::new(()))
     }
 }

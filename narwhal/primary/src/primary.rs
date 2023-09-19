@@ -6,6 +6,7 @@ use crate::{
     block_waiter::BlockWaiter,
     certificate_fetcher::CertificateFetcher,
     certifier::Certifier,
+    external_event::external_message::{self, ExternalMessageHandler},
     grpc_server::ConsensusAPIGrpc,
     metrics::{initialise_metrics, PrimaryMetrics},
     proposer::{OurDigestMessage, Proposer},
@@ -59,7 +60,7 @@ use storage::{
     CertificateStore, HeaderStore, PayloadStore, ProposerStore, TssStore, VoteDigestStore,
 };
 use sui_protocol_config::ProtocolConfig;
-use tokio::sync::RwLock;
+use tokio::sync::{mpsc::UnboundedReceiver, RwLock};
 use tokio::{sync::watch, task::JoinHandle};
 use tokio::{
     sync::{mpsc, oneshot},
@@ -70,13 +71,13 @@ use tracing::{debug, error, info, instrument, warn};
 use types::{
     ensure,
     error::{DagError, DagResult},
-    now, Certificate, CertificateAPI, CertificateDigest, FetchCertificatesRequest,
+    now, Certificate, CertificateAPI, CertificateDigest, ExternalMessage, FetchCertificatesRequest,
     FetchCertificatesResponse, GetCertificatesRequest, GetCertificatesResponse, Header, HeaderAPI,
     MetadataAPI, PayloadAvailabilityRequest, PayloadAvailabilityResponse,
-    PreSubscribedBroadcastSender, PrimaryToPrimary, PrimaryToPrimaryServer, RequestVoteRequest,
-    RequestVoteResponse, Round, SendCertificateRequest, SendCertificateResponse, TssPeerServer,
-    Vote, VoteInfoAPI, WorkerOthersBatchMessage, WorkerOurBatchMessage, WorkerOwnBatchMessage,
-    WorkerToPrimary, WorkerToPrimaryServer,
+    PreSubscribedBroadcastSender, PrimaryToPrimary, PrimaryToPrimaryServer, RequestVerifyRequest,
+    RequestVerifyResponse, RequestVoteRequest, RequestVoteResponse, Round, SendCertificateRequest,
+    SendCertificateResponse, TssPeerServer, Vote, VoteInfoAPI, WorkerOthersBatchMessage,
+    WorkerOurBatchMessage, WorkerOwnBatchMessage, WorkerToPrimary, WorkerToPrimaryServer,
 };
 
 #[cfg(any(test))]
@@ -120,6 +121,7 @@ impl Primary {
         tx_committed_certificates: Sender<(Round, Vec<Certificate>)>,
         registry: &Registry,
         leader_schedule: LeaderSchedule,
+        rx_external_message: UnboundedReceiver<ExternalMessage>,
     ) -> Vec<JoinHandle<()>> {
         // Write the parameters to the logs.
         parameters.tracing();
@@ -205,7 +207,7 @@ impl Primary {
             &primary_channel_metrics,
         ));
 
-        let signature_service = SignatureService::new(signer);
+        let signature_service = SignatureService::new(signer.copy());
 
         // Spawn the network receiver listening to messages from the other primaries.
         let address = authority.primary_address();
@@ -481,6 +483,15 @@ impl Primary {
             network.clone(),
         );
 
+        let signature_service = SignatureService::new(signer);
+        let external_message_handle = ExternalMessageHandler::spawn(
+            authority.id(),
+            committee.clone(),
+            signature_service,
+            network.clone(),
+            rx_external_message,
+            tx_shutdown.subscribe(),
+        );
         // The `CertificateFetcher` waits to receive all the ancestors of a certificate before looping it back to the
         // `Synchronizer` for further processing.
         let certificate_fetcher_handle = CertificateFetcher::spawn(
@@ -531,6 +542,7 @@ impl Primary {
             proposer_handle,
             connection_monitor_handle,
             tss_handle,
+            external_message_handle,
         ];
         handles.extend(admin_handles);
 
@@ -990,6 +1002,18 @@ impl PrimaryReceiverHandler {
 
         Ok(digests)
     }
+
+    #[allow(clippy::mutable_key_type)]
+    async fn process_request_event_verify(
+        &self,
+        request: anemo::Request<RequestVerifyRequest>,
+    ) -> DagResult<RequestVerifyResponse> {
+        let event = &request.body().event;
+        info!("Receive s request_event_verify {:?}", event);
+        Ok(RequestVerifyResponse {
+            event: Some(event.clone()),
+        })
+    }
 }
 
 #[async_trait]
@@ -1199,6 +1223,37 @@ impl PrimaryToPrimary for PrimaryReceiverHandler {
         Ok(anemo::Response::new(PayloadAvailabilityResponse {
             payload_availability: result,
         }))
+    }
+
+    async fn request_event_verify(
+        &self,
+        request: anemo::Request<RequestVerifyRequest>,
+    ) -> Result<anemo::Response<RequestVerifyResponse>, anemo::rpc::Status> {
+        self.process_request_event_verify(request)
+            .await
+            .map(anemo::Response::new)
+            .map_err(|e| {
+                anemo::rpc::Status::new_with_message(
+                    match e {
+                        // Report unretriable errors as 400 Bad Request.
+                        DagError::InvalidSignature
+                        | DagError::InvalidEpoch { .. }
+                        | DagError::InvalidHeaderDigest
+                        | DagError::HeaderHasBadWorkerIds(_)
+                        | DagError::HeaderHasInvalidParentRoundNumbers(_)
+                        | DagError::HeaderHasDuplicateParentAuthorities(_)
+                        | DagError::AlreadyVoted(_, _, _)
+                        | DagError::AlreadyVotedNewerHeader(_, _, _)
+                        | DagError::HeaderRequiresQuorum(_)
+                        | DagError::TooOld(_, _, _) => {
+                            anemo::types::response::StatusCode::BadRequest
+                        }
+                        // All other errors are retriable.
+                        _ => anemo::types::response::StatusCode::Unknown,
+                    },
+                    format!("{e:?}"),
+                )
+            })
     }
 }
 

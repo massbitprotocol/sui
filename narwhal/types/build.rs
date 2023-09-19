@@ -102,6 +102,15 @@ fn build_anemo_services(out_dir: &Path) {
                 .codec_path(codec_path)
                 .build(),
         )
+        .method(
+            anemo_build::manual::Method::builder()
+                .name("request_event_verify")
+                .route_name("RequestEventVerify")
+                .request_type("crate::RequestVerifyRequest")
+                .response_type("crate::RequestVerifyResponse")
+                .codec_path(codec_path)
+                .build(),
+        )
         .build();
 
     let primary_to_worker = anemo_build::manual::Service::builder()
@@ -131,6 +140,15 @@ fn build_anemo_services(out_dir: &Path) {
                 .name("delete_batches")
                 .route_name("DeleteBatches")
                 .request_type("crate::WorkerDeleteBatchesMessage")
+                .response_type("()")
+                .codec_path(codec_path)
+                .build(),
+        )
+        .method(
+            anemo_build::manual::Method::builder()
+                .name("create_cross_chain_transaction")
+                .route_name("CreateCrossChainTransaction")
+                .request_type("crate::CrossChainTransaction")
                 .response_type("()")
                 .codec_path(codec_path)
                 .build(),
