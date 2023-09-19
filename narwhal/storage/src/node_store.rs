@@ -6,7 +6,7 @@ use crate::proposer_store::ProposerKey;
 use crate::vote_digest_store::VoteDigestStore;
 use crate::{
     CertificateStore, CertificateStoreCache, CertificateStoreCacheMetrics, ConsensusStore,
-    HeaderStore, ProposerStore, TssStore,
+    EventStore, HeaderStore, ProposerStore,
 };
 use config::{AuthorityIdentifier, WorkerId};
 use std::num::NonZeroUsize;
@@ -16,10 +16,12 @@ use store::metrics::SamplingInterval;
 use store::reopen;
 use store::rocks::{default_db_options, open_cf_opts, DBMap, MetricConf, ReadWriteOptions};
 use tokio::sync::RwLock;
+use tracing::Event;
 use types::{
     Batch, BatchDigest, Certificate, CertificateDigest, CommittedSubDagShell, ConsensusCommit,
     Header, HeaderDigest, Round, SequenceNumber, VoteInfo,
 };
+use types::{EventDigest, EventVerify};
 
 // A type alias marking the "payload" tokens sent by workers to their primary as batch acknowledgements
 pub type PayloadToken = u8;
@@ -34,7 +36,7 @@ pub struct NodeStorage {
     pub payload_store: PayloadStore,
     pub batch_store: DBMap<BatchDigest, Batch>,
     pub consensus_store: Arc<ConsensusStore>,
-    pub tss_store: Arc<RwLock<TssStore>>,
+    pub event_store: EventStore,
 }
 
 impl NodeStorage {
@@ -42,6 +44,7 @@ impl NodeStorage {
     pub(crate) const LAST_PROPOSED_CF: &'static str = "last_proposed";
     pub(crate) const VOTES_CF: &'static str = "votes";
     pub(crate) const HEADERS_CF: &'static str = "headers";
+    pub(crate) const EVENTS_CF: &'static str = "events";
     pub(crate) const CERTIFICATES_CF: &'static str = "certificates";
     pub(crate) const CERTIFICATE_DIGEST_BY_ROUND_CF: &'static str = "certificate_digest_by_round";
     pub(crate) const CERTIFICATE_DIGEST_BY_ORIGIN_CF: &'static str = "certificate_digest_by_origin";
@@ -70,6 +73,13 @@ impl NodeStorage {
             (Self::VOTES_CF, cf_options.clone()),
             (
                 Self::HEADERS_CF,
+                default_db_options()
+                    .optimize_for_write_throughput()
+                    .optimize_for_large_values_no_scan(1 << 10)
+                    .options,
+            ),
+            (
+                Self::EVENTS_CF,
                 default_db_options()
                     .optimize_for_write_throughput()
                     .optimize_for_large_values_no_scan(1 << 10)
@@ -108,6 +118,7 @@ impl NodeStorage {
             last_proposed_map,
             votes_map,
             header_map,
+            event_map,
             certificate_map,
             certificate_digest_by_round_map,
             certificate_digest_by_origin_map,
@@ -120,6 +131,7 @@ impl NodeStorage {
             Self::LAST_PROPOSED_CF;<ProposerKey, Header>,
             Self::VOTES_CF;<AuthorityIdentifier, VoteInfo>,
             Self::HEADERS_CF;<HeaderDigest, Header>,
+            Self::EVENTS_CF;<EventDigest, EventVerify>,
             Self::CERTIFICATES_CF;<CertificateDigest, Certificate>,
             Self::CERTIFICATE_DIGEST_BY_ROUND_CF;<(Round, AuthorityIdentifier), CertificateDigest>,
             Self::CERTIFICATE_DIGEST_BY_ORIGIN_CF;<(AuthorityIdentifier, Round), CertificateDigest>,
@@ -151,7 +163,7 @@ impl NodeStorage {
             sub_dag_index_map,
             committed_sub_dag_map,
         ));
-        let tss_store = Arc::new(RwLock::new(TssStore::default()));
+        let event_store = EventStore::new(event_map);
         Self {
             proposer_store,
             vote_digest_store,
@@ -160,7 +172,7 @@ impl NodeStorage {
             payload_store,
             batch_store,
             consensus_store,
-            tss_store,
+            event_store,
         }
     }
 }

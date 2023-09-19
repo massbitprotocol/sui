@@ -309,7 +309,7 @@ impl PrimaryNodeInner {
             store.proposer_store.clone(),
             store.payload_store.clone(),
             store.vote_digest_store.clone(),
-            store.tss_store.clone(),
+            store.event_store.clone(),
             tx_new_certificates,
             rx_committed_certificates,
             rx_consensus_round_updates,

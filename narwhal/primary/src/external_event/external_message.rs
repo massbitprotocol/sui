@@ -1,4 +1,3 @@
-use crate::external_event::{Header, HeaderDigest};
 use anemo::Network;
 use config::{committee, AuthorityIdentifier, Committee, Epoch};
 use core::time::Duration;
@@ -8,8 +7,9 @@ use futures::stream::FuturesUnordered;
 use futures::StreamExt;
 use network::anemo_ext::NetworkExt;
 use serde::{Deserialize, Serialize};
+use storage::EventStore;
 use tokio::{sync::mpsc::UnboundedReceiver, task::JoinHandle};
-use tracing::{debug, info, warn};
+use tracing::{debug, error, info, warn};
 use types::error::{DagError, DagResult};
 use types::{
     ConditionalBroadcastReceiver, EventDigest, EventVerify, ExternalMessage,
@@ -23,6 +23,7 @@ pub struct ExternalMessageHandler {
     /// The current round of the dag.
     pub round: Round,
     pub signature_service: SignatureService<Signature, { crypto::INTENT_MESSAGE_LENGTH }>,
+    pub event_store: EventStore,
     pub network: Network,
 }
 
@@ -41,6 +42,7 @@ impl ExternalMessageHandler {
                     },
                     Some(msg) = rx_external_message.recv() => {
                         //Sign message and send request verification
+                        info!("Receive message from external chain {:?}", &msg);
                         let digest = EventDigest (msg.block.hash.unwrap().0.clone());
                         let round = self.round.clone();
                         let committee = self.committee.clone();
@@ -50,14 +52,25 @@ impl ExternalMessageHandler {
                             authority.clone(),
                             round,
                             committee.epoch(),
-                            digest,
+                            digest.clone(),
                             signature_service
                         )
                         .await;
+                        if let Ok(Some(mut stored_event)) = self.event_store.read(&digest) {
+                            info!("Stored event {:?}", &stored_event);
+                            if let Some(signature) = event.get_signature(&authority) {
+                                stored_event.add_signature(&authority, signature.clone());
+                                if let Err(e) = self.event_store.write(&stored_event) {
+                                    error!("Event store error {:?}", e);
+                                }
+                            }
+                        } else {
+                            info!("Write event into node's event_store {:?}", &event);
+                            self.event_store.write(&event);
+                        }
                         let network = self.network.clone();
                         Self::propose_event(authority, committee, event, network).await;
-                        //self.sign_message(msg.block.hash.unwrap().0.clone());
-                        info!("Receive message from external chain {:?}", &msg);
+
                     }
                 }
             }
@@ -75,6 +88,7 @@ impl ExternalMessageHandler {
         authority_id: AuthorityIdentifier,
         committee: Committee,
         signature_service: SignatureService<Signature, { crypto::INTENT_MESSAGE_LENGTH }>,
+        event_store: EventStore,
         network: Network,
     ) -> Self {
         ExternalMessageHandler {
@@ -82,6 +96,7 @@ impl ExternalMessageHandler {
             committee,
             round: 0,
             signature_service,
+            event_store,
             network,
         }
     }
@@ -89,12 +104,18 @@ impl ExternalMessageHandler {
         authority_id: AuthorityIdentifier,
         committee: Committee,
         signature_service: SignatureService<Signature, { crypto::INTENT_MESSAGE_LENGTH }>,
+        event_store: EventStore,
         network: Network,
         mut rx_external_message: UnboundedReceiver<ExternalMessage>,
         mut rx_shutdown: ConditionalBroadcastReceiver,
     ) -> JoinHandle<()> {
-        let handler =
-            ExternalMessageHandler::new(authority_id, committee, signature_service, network);
+        let handler = ExternalMessageHandler::new(
+            authority_id,
+            committee,
+            signature_service,
+            event_store,
+            network,
+        );
         handler.run(rx_external_message, rx_shutdown)
     }
     pub async fn propose_event(

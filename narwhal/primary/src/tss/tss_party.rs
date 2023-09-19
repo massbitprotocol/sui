@@ -44,7 +44,6 @@ pub struct TssParty {
     network: Network,
     tx_keygen: UnboundedSender<MessageIn>,
     tx_sign: UnboundedSender<MessageIn>,
-    tss_store: Arc<RwLock<TssStore>>,
     tofnd_client: Option<Arc<RwLock<Gg20Client<Channel>>>>,
 }
 impl TssParty {
@@ -52,7 +51,6 @@ impl TssParty {
         authority: Authority,
         committee: Committee,
         network: Network,
-        tss_store: Arc<RwLock<TssStore>>,
         tx_keygen: UnboundedSender<MessageIn>,
         tx_sign: UnboundedSender<MessageIn>,
     ) -> Self {
@@ -62,7 +60,6 @@ impl TssParty {
             network,
             tx_keygen,
             tx_sign,
-            tss_store,
             tofnd_client: None,
         }
     }
@@ -474,7 +471,7 @@ impl TssParty {
         info!("Keygen result {:?}", &key_data);
         match key_data {
             KeygenResultData::Data(data) => {
-                self.tss_store.write().await.set_key(data);
+                //self.tss_store.write().await.set_key(data);
             }
             KeygenResultData::Criminals(c) => {
                 warn!("Crimials {:?}", c);
@@ -486,19 +483,19 @@ impl TssParty {
         match sign_data {
             SignResultData::Signature(sig) => {
                 info!("Vefifying signature {:?}", sig.as_slice());
-                let pub_key = self.tss_store.read().await.get_key();
-                match pub_key {
-                    Some(key) => {
-                        info!("pub key {:?}", &key.pub_key);
-                        let verify_result = self.verify(
-                            key.pub_key.as_slice(),
-                            message_digest.as_slice(),
-                            sig.as_slice(),
-                        );
-                        info!("Verify result {:?}", verify_result);
-                    }
-                    None => warn!("Missing pubkey"),
-                }
+                // let pub_key = self.tss_store.read().await.get_key();
+                // match pub_key {
+                //     Some(key) => {
+                //         info!("pub key {:?}", &key.pub_key);
+                //         let verify_result = self.verify(
+                //             key.pub_key.as_slice(),
+                //             message_digest.as_slice(),
+                //             sig.as_slice(),
+                //         );
+                //         info!("Verify result {:?}", verify_result);
+                //     }
+                //     None => warn!("Missing pubkey"),
+                // }
             }
             SignResultData::Criminals(c) => {
                 warn!("Crimials {:?}", c);

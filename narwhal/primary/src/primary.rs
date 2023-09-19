@@ -57,7 +57,8 @@ use std::{
     time::Duration,
 };
 use storage::{
-    CertificateStore, HeaderStore, PayloadStore, ProposerStore, TssStore, VoteDigestStore,
+    CertificateStore, EventStore, HeaderStore, PayloadStore, ProposerStore, TssStore,
+    VoteDigestStore,
 };
 use sui_protocol_config::ProtocolConfig;
 use tokio::sync::{mpsc::UnboundedReceiver, RwLock};
@@ -112,7 +113,7 @@ impl Primary {
         proposer_store: ProposerStore,
         payload_store: PayloadStore,
         vote_digest_store: VoteDigestStore,
-        tss_store: Arc<RwLock<TssStore>>,
+        event_store: EventStore,
         tx_new_certificates: Sender<Certificate>,
         rx_committed_certificates: Receiver<(Round, Vec<Certificate>)>,
         rx_consensus_round_updates: watch::Receiver<ConsensusRound>,
@@ -224,6 +225,7 @@ impl Primary {
             certificate_store: certificate_store.clone(),
             payload_store: payload_store.clone(),
             vote_digest_store,
+            event_store: event_store.clone(),
             rx_narwhal_round_updates,
             parent_digests: Default::default(),
             metrics: node_metrics.clone(),
@@ -488,6 +490,7 @@ impl Primary {
             authority.id(),
             committee.clone(),
             signature_service,
+            event_store,
             network.clone(),
             rx_external_message,
             tx_shutdown.subscribe(),
@@ -531,7 +534,6 @@ impl Primary {
             authority.clone(),
             committee.clone(),
             network.clone(),
-            tss_store,
             tx_tss_genkey,
             tx_tss_sign,
         );
@@ -680,6 +682,7 @@ struct PrimaryReceiverHandler {
     payload_store: PayloadStore,
     /// The store to persist the last voted round per authority, used to ensure idempotence.
     vote_digest_store: VoteDigestStore,
+    event_store: EventStore,
     /// Get a signal when the round changes.
     rx_narwhal_round_updates: watch::Receiver<Round>,
     /// Known parent digests that are being fetched from header proposers.
@@ -1009,7 +1012,22 @@ impl PrimaryReceiverHandler {
         request: anemo::Request<RequestVerifyRequest>,
     ) -> DagResult<RequestVerifyResponse> {
         let event = &request.body().event;
-        info!("Receive s request_event_verify {:?}", event);
+        let event_digest = event.digest();
+        if let Some(mut stored_event) = self.event_store.read(&event_digest)? {
+            info!("Stored event {:?}", &stored_event);
+            for (authoriry, signature) in event.signatures.iter() {
+                stored_event.add_signature(authoriry, signature.clone());
+            }
+            if let Err(e) = self.event_store.write(&stored_event) {
+                error!("Event store error {:?}", e);
+            }
+        } else {
+            self.event_store.write(event);
+        }
+        // Get event from event store
+        //
+        info!("Received request_event_verify {:?}", event);
+
         Ok(RequestVerifyResponse {
             event: Some(event.clone()),
         })

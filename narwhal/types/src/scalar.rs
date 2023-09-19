@@ -21,10 +21,11 @@ impl ExternalMessage {
 pub struct EventDigest(pub [u8; crypto::DIGEST_LENGTH]);
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct EventVerify {
+    pub digest: EventDigest,
     pub author: AuthorityIdentifier,
     pub round: Round,
     pub epoch: Epoch,
-    pub payload: HashMap<EventDigest, AuthorityIdentifier>,
+    pub signatures: HashMap<AuthorityIdentifier, Signature>,
 }
 
 impl From<EventDigest> for Digest<{ crypto::INTENT_MESSAGE_LENGTH }> {
@@ -47,15 +48,27 @@ impl EventVerify {
         digest: EventDigest,
         signature_service: SignatureService<Signature, { crypto::INTENT_MESSAGE_LENGTH }>,
     ) -> Self {
-        let mut payload = HashMap::default();
-        payload.insert(digest.clone(), author.clone());
-        let signature = signature_service.request_signature(digest.into()).await;
+        let mut signatures = HashMap::default();
+        let signature = signature_service
+            .request_signature(digest.clone().into())
+            .await;
+        signatures.insert(author.clone(), signature);
         Self {
+            digest,
             author,
             round,
             epoch,
-            payload,
+            signatures,
         }
+    }
+    pub fn digest(&self) -> EventDigest {
+        EventDigest(self.digest.0.clone())
+    }
+    pub fn add_signature(&mut self, authority: &AuthorityIdentifier, signature: Signature) {
+        self.signatures.insert(authority.clone(), signature);
+    }
+    pub fn get_signature(&self, authority: &AuthorityIdentifier) -> Option<&Signature> {
+        self.signatures.get(authority)
     }
 }
 
