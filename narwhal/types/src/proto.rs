@@ -10,6 +10,10 @@ pub use tss::{
     tss_peer_server::{TssPeer, TssPeerServer},
     KeygenInit, KeygenOutput, MessageIn, MessageOut, SignInit, TrafficIn, TrafficOut,
 };
+mod scalar {
+    include!(concat!(env!("OUT_DIR"), "/scalar.ScalarEvent.rs"));
+}
+pub use scalar::*;
 mod narwhal {
     #![allow(clippy::derive_partial_eq_without_eq)]
     tonic::include_proto!("narwhal");

@@ -36,6 +36,7 @@ fn main() -> Result<()> {
 
     build_anemo_services(&out_dir);
     build_tss_service(&out_dir);
+    build_scalar_event_service(&out_dir);
     println!("cargo:rerun-if-changed=build.rs");
     println!("cargo:rerun-if-changed=proto");
     println!("cargo:rerun-if-env-changed=DUMP_GENERATED_GRPC");
@@ -273,6 +274,37 @@ fn build_tss_service(out_dir: &Path) {
         .out_dir(out_dir)
         .compile(&[tss_service]);
 }
+
+fn build_scalar_event_service(out_dir: &Path) {
+    let codec_path = "mysten_network::codec::anemo::BcsSnappyCodec";
+
+    let scalar_event_service = anemo_build::manual::Service::builder()
+        .name("ScalarEvent")
+        .package("scalar")
+        .method(
+            anemo_build::manual::Method::builder()
+                .name("request_event_verify")
+                .route_name("RequestEventVerify")
+                .request_type("crate::RequestVerifyRequest")
+                .response_type("crate::RequestVerifyResponse")
+                .codec_path(codec_path)
+                .build(),
+        )
+        .method(
+            anemo_build::manual::Method::builder()
+                .name("create_cross_chain_transaction")
+                .route_name("CreateCrossChainTransaction")
+                .request_type("crate::CrossChainTransaction")
+                .response_type("()")
+                .codec_path(codec_path)
+                .build(),
+        )
+        .build();
+    anemo_build::manual::Builder::new()
+        .out_dir(out_dir)
+        .compile(&[scalar_event_service]);
+}
+
 #[rustversion::nightly]
 fn nightly() {
     println!("cargo:rustc-cfg=nightly");

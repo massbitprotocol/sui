@@ -63,6 +63,20 @@ impl TssParty {
             tofnd_client: None,
         }
     }
+    pub async fn create_tofnd_client(port: u16) -> Option<Gg20Client<Channel>> {
+        let tss_host =
+            std::env::var("TSS_HOST").unwrap_or_else(|_| Ipv4Addr::LOCALHOST.to_string());
+        let tss_port = std::env::var("TSS_PORT")
+            .ok()
+            .and_then(|p| p.parse::<u16>().ok())
+            .unwrap_or_else(|| port);
+        //+ authority.id().0;
+        let tss_addr = format!("http://{}:{}", tss_host, tss_port);
+        info!("TSS address {}", &tss_addr);
+
+        let tofnd_client = Gg20Client::connect(tss_addr.clone()).await.ok();
+        tofnd_client
+    }
     pub fn get_uid(&self) -> String {
         PeerId(self.authority.network_key().0.to_bytes()).to_string()
     }
@@ -74,7 +88,7 @@ impl TssParty {
             .collect::<Vec<String>>();
         party_uids
     }
-    fn create_keygen_init(&self) -> KeygenInit {
+    pub fn create_keygen_init(&self) -> KeygenInit {
         KeygenInit {
             new_key_uid: format!("tss_session{}", self.committee.epoch()),
             party_uids: self.get_parties(),
@@ -93,37 +107,36 @@ impl TssParty {
         }
     }
 
-    async fn create_tofnd_client(&mut self) -> Option<Arc<RwLock<Gg20Client<Channel>>>> {
-        if self.tofnd_client.is_none() {
-            let tss_host =
-                std::env::var("TSS_HOST").unwrap_or_else(|_| Ipv4Addr::LOCALHOST.to_string());
-            let tss_port = std::env::var("TSS_PORT")
-                .ok()
-                .and_then(|p| p.parse::<u16>().ok())
-                .unwrap_or_else(|| 50010 + self.authority.id().0);
-            //+ authority.id().0;
-            let tss_addr = format!("http://{}:{}", tss_host, tss_port);
-            info!("TSS address {}", &tss_addr);
+    // async fn create_tofnd_client(&mut self) -> Option<Arc<RwLock<Gg20Client<Channel>>>> {
+    //     if self.tofnd_client.is_none() {
+    //         let tss_host =
+    //             std::env::var("TSS_HOST").unwrap_or_else(|_| Ipv4Addr::LOCALHOST.to_string());
+    //         let tss_port = std::env::var("TSS_PORT")
+    //             .ok()
+    //             .and_then(|p| p.parse::<u16>().ok())
+    //             .unwrap_or_else(|| 50010 + self.authority.id().0);
+    //         //+ authority.id().0;
+    //         let tss_addr = format!("http://{}:{}", tss_host, tss_port);
+    //         info!("TSS address {}", &tss_addr);
 
-            self.tofnd_client = Gg20Client::connect(tss_addr.clone())
-                .await
-                .map(|client| Arc::new(RwLock::new(client)))
-                .ok();
-        }
-        self.tofnd_client.clone()
-    }
+    //         self.tofnd_client = Gg20Client::connect(tss_addr.clone())
+    //             .await
+    //             .map(|client| Arc::new(RwLock::new(client)))
+    //             .ok();
+    //     }
+    //     self.tofnd_client.clone()
+    // }
     pub async fn execute_keygen(
-        &mut self,
+        &self,
         keygen_init: KeygenInit,
         rx_keygen: UnboundedReceiver<MessageIn>,
     ) -> Result<KeygenResult, tonic::Status> {
         let my_uid = self.get_uid();
-        match self.create_tofnd_client().await {
+        let port = 50010 + self.authority.id().0;
+        match Self::create_tofnd_client(port).await {
             None => Err(Status::not_found("tofnd client not found")),
-            Some(client) => {
+            Some(mut client) => {
                 let mut keygen_server_outgoing = client
-                    .write()
-                    .await
                     .keygen(tonic::Request::new(UnboundedReceiverStream::new(rx_keygen)))
                     .await
                     .unwrap()
@@ -226,7 +239,7 @@ impl TssParty {
         }
     }
     pub async fn execute_sign(
-        &mut self,
+        &self,
         sign_init: SignInit,
         rx_sign: UnboundedReceiver<MessageIn>,
     ) -> Result<SignResult, tonic::Status> {
@@ -235,13 +248,12 @@ impl TssParty {
             "Execute sign flow for message {:?}",
             &sign_init.message_to_sign //String::from_utf8(sign_init.message_to_sign.to_vec())
         );
-        match self.create_tofnd_client().await {
+        let port = 50010 + self.authority.id().0;
+        match Self::create_tofnd_client(port).await {
             None => Err(Status::not_found("tofnd client not found")),
-            Some(client) => {
+            Some(mut client) => {
                 info!("Call tss gRPC server for sign flow");
                 let mut sign_server_outgoing = client
-                    .write()
-                    .await
                     .sign(tonic::Request::new(UnboundedReceiverStream::new(rx_sign)))
                     .await
                     .unwrap()

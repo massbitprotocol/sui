@@ -6,10 +6,11 @@ use crate::{
     block_waiter::BlockWaiter,
     certificate_fetcher::CertificateFetcher,
     certifier::Certifier,
-    external_event::external_message::{self, ExternalMessageHandler},
     grpc_server::ConsensusAPIGrpc,
     metrics::{initialise_metrics, PrimaryMetrics},
     proposer::{OurDigestMessage, Proposer},
+    scalar_event::ScalarEventService,
+    scalar_event::{self, ScalarEventHandler},
     state_handler::StateHandler,
     synchronizer::Synchronizer,
     tss::{TssParty, TssPeerService},
@@ -72,7 +73,9 @@ use tracing::{debug, error, info, instrument, warn};
 use types::{
     ensure,
     error::{DagError, DagResult},
-    now, Certificate, CertificateAPI, CertificateDigest, ExternalMessage, FetchCertificatesRequest,
+    now,
+    scalar_event_server::ScalarEventServer,
+    Certificate, CertificateAPI, CertificateDigest, ExternalMessage, FetchCertificatesRequest,
     FetchCertificatesResponse, GetCertificatesRequest, GetCertificatesResponse, Header, HeaderAPI,
     MetadataAPI, PayloadAvailabilityRequest, PayloadAvailabilityResponse,
     PreSubscribedBroadcastSender, PrimaryToPrimary, PrimaryToPrimaryServer, RequestVerifyRequest,
@@ -297,13 +300,20 @@ impl Primary {
         //Tss service
         let (tx_tss_genkey, rx_tss_genkey) = mpsc::unbounded_channel();
         let (tx_tss_sign, rx_tss_sign) = mpsc::unbounded_channel();
+        let (tx_tss_sign_init, rx_tss_sign_init) = mpsc::unbounded_channel();
         let tss_service = TssPeerServer::new(TssPeerService::new(
             tx_tss_genkey.clone(),
             tx_tss_sign.clone(),
         ));
+        let scalar_event_service = ScalarEventServer::new(ScalarEventService::new(
+            committee.clone(),
+            event_store.clone(),
+            tx_tss_sign_init,
+        ));
         let routes = anemo::Router::new()
             .add_rpc_service(primary_service)
             .add_rpc_service(tss_service)
+            .add_rpc_service(scalar_event_service)
             .route_layer(RequireAuthorizationLayer::new(AllowedEpoch::new(
                 epoch_string.clone(),
             )))
@@ -486,12 +496,17 @@ impl Primary {
         );
 
         let signature_service = SignatureService::new(signer);
-        let external_message_handle = ExternalMessageHandler::spawn(
-            authority.id(),
+        let scalar_event_handle = ScalarEventHandler::spawn(
+            authority.clone(),
             committee.clone(),
             signature_service,
             event_store,
             network.clone(),
+            tx_tss_genkey,
+            tx_tss_sign,
+            rx_tss_genkey,
+            rx_tss_sign,
+            rx_tss_sign_init,
             rx_external_message,
             tx_shutdown.subscribe(),
         );
@@ -530,21 +545,20 @@ impl Primary {
             leader_schedule,
         );
         // Modified: Add tss handle
-        let mut tss_party = TssParty::new(
-            authority.clone(),
-            committee.clone(),
-            network.clone(),
-            tx_tss_genkey,
-            tx_tss_sign,
-        );
-        let tss_handle = tss_party.spawn(rx_tss_genkey, rx_tss_sign, tx_shutdown.subscribe());
+        // let mut tss_party = TssParty::new(
+        //     authority.clone(),
+        //     committee.clone(),
+        //     network.clone(),
+        //     tx_tss_genkey,
+        //     tx_tss_sign,
+        // );
+        // let tss_handle = tss_party.spawn(rx_tss_genkey, rx_tss_sign, tx_shutdown.subscribe());
         let mut handles = vec![
             core_handle,
             certificate_fetcher_handle,
             proposer_handle,
             connection_monitor_handle,
-            tss_handle,
-            external_message_handle,
+            scalar_event_handle,
         ];
         handles.extend(admin_handles);
 
@@ -1013,16 +1027,28 @@ impl PrimaryReceiverHandler {
     ) -> DagResult<RequestVerifyResponse> {
         let event = &request.body().event;
         let event_digest = event.digest();
-        if let Some(mut stored_event) = self.event_store.read(&event_digest)? {
+        if let Some(mut stored_event) = self.event_store.read(&event_digest).await? {
             info!("Stored event {:?}", &stored_event);
             for (authoriry, signature) in event.signatures.iter() {
                 stored_event.add_signature(authoriry, signature.clone());
             }
-            if let Err(e) = self.event_store.write(&stored_event) {
+            if let Err(e) = self.event_store.write(&stored_event).await {
                 error!("Event store error {:?}", e);
             }
+            let mut total_stake = 0;
+            for (id, _) in stored_event.signatures.iter() {
+                if let Some(authority) = self.committee.authority(id) {
+                    total_stake += authority.stake();
+                }
+            }
+            if total_stake > self.committee.quorum_threshold() {
+                info!("Stake: {}/{}", total_stake, total_stake);
+                //Request tss then create N&B Transaction
+                //Create transaction
+            }
         } else {
-            self.event_store.write(event);
+            info!("Stored event notfound, write peer's event into the storage");
+            self.event_store.write(event).await;
         }
         // Get event from event store
         //

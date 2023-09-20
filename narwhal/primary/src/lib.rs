@@ -17,11 +17,11 @@ mod certifier;
 #[cfg(test)]
 #[path = "tests/common.rs"]
 mod common;
-mod external_event;
 mod grpc_server;
 mod metrics;
 mod primary;
 mod proposer;
+mod scalar_event;
 mod state_handler;
 mod synchronizer;
 mod tss;
