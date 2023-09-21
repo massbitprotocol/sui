@@ -297,12 +297,16 @@ impl Primary {
             .route_layer(RequireAuthorizationLayer::new(AllowedEpoch::new(
                 epoch_string.clone(),
             )));
-        //Tss service
-        let (tx_tss_genkey, rx_tss_genkey) = mpsc::unbounded_channel();
+        // Channel for communication between Tss spawn and Anemo Tss service
+        let (tx_tss_keygen, rx_tss_keygen) = mpsc::unbounded_channel();
         let (tx_tss_sign, rx_tss_sign) = mpsc::unbounded_channel();
+        // Send sign init from Scalar Event handler to Tss spawn
         let (tx_tss_sign_init, rx_tss_sign_init) = mpsc::unbounded_channel();
+        // Send sign result from tss spawn to Scalar handler
+        let (tx_tss_sign_result, rx_tss_sign_result) = mpsc::unbounded_channel();
+
         let tss_service = TssPeerServer::new(TssPeerService::new(
-            tx_tss_genkey.clone(),
+            tx_tss_keygen.clone(),
             tx_tss_sign.clone(),
         ));
         let scalar_event_service = ScalarEventServer::new(ScalarEventService::new(
@@ -496,17 +500,25 @@ impl Primary {
         );
 
         let signature_service = SignatureService::new(signer);
+        let tss_handle = TssParty::spawn(
+            authority.clone(),
+            committee.clone(),
+            network.clone(),
+            tx_tss_keygen,
+            rx_tss_keygen,
+            tx_tss_sign,
+            rx_tss_sign,
+            rx_tss_sign_init,
+            tx_tss_sign_result,
+            tx_shutdown.subscribe(),
+        );
         let scalar_event_handle = ScalarEventHandler::spawn(
             authority.clone(),
             committee.clone(),
             signature_service,
             event_store,
             network.clone(),
-            tx_tss_genkey,
-            tx_tss_sign,
-            rx_tss_genkey,
-            rx_tss_sign,
-            rx_tss_sign_init,
+            rx_tss_sign_result,
             rx_external_message,
             tx_shutdown.subscribe(),
         );
@@ -544,22 +556,16 @@ impl Primary {
             node_metrics,
             leader_schedule,
         );
-        // Modified: Add tss handle
-        // let mut tss_party = TssParty::new(
-        //     authority.clone(),
-        //     committee.clone(),
-        //     network.clone(),
-        //     tx_tss_genkey,
-        //     tx_tss_sign,
-        // );
-        // let tss_handle = tss_party.spawn(rx_tss_genkey, rx_tss_sign, tx_shutdown.subscribe());
+
         let mut handles = vec![
             core_handle,
             certificate_fetcher_handle,
             proposer_handle,
             connection_monitor_handle,
+            tss_handle,
             scalar_event_handle,
         ];
+
         handles.extend(admin_handles);
 
         // If a DAG component is present then we are not using the internal consensus (Bullshark)

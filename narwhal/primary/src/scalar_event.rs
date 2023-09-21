@@ -1,4 +1,4 @@
-use crate::tss::TssParty;
+use crate::tss::{TssParty, TssSigner};
 use anemo::{Network, PeerId};
 use config::Authority;
 use config::{committee, AuthorityIdentifier, Committee, Epoch};
@@ -12,17 +12,17 @@ use serde::{Deserialize, Serialize};
 use storage::EventStore;
 use tokio::sync::mpsc::UnboundedSender;
 use tokio::{sync::mpsc::UnboundedReceiver, task::JoinHandle};
+use tokio_stream::wrappers::UnboundedReceiverStream;
 use tracing::{debug, error, info, warn};
 use types::error::{DagError, DagResult};
-use types::scalar_event_client::ScalarEventClient;
 use types::SignInit;
 use types::{
-    message_out::KeygenResult,
+    message_out::{sign_result::SignResultData, KeygenResult, SignResult},
+    scalar_event_client::ScalarEventClient,
     scalar_event_server::{ScalarEvent, ScalarEventServer},
     ConditionalBroadcastReceiver, CrossChainTransaction, EventDigest, EventVerify, ExternalMessage,
     MessageIn, PrimaryToPrimaryClient, RequestVerifyRequest, RequestVerifyResponse, Round,
 };
-
 #[derive(Clone)]
 pub struct ScalarEventHandler {
     pub authority_id: AuthorityIdentifier,
@@ -32,56 +32,20 @@ pub struct ScalarEventHandler {
     pub signature_service: SignatureService<Signature, { crypto::INTENT_MESSAGE_LENGTH }>,
     pub event_store: EventStore,
     pub network: Network,
-    pub tss_party: TssParty,
 }
 
 impl ScalarEventHandler {
     pub fn run(
         mut self,
-        rx_tss_keygen: UnboundedReceiver<MessageIn>,
-        rx_tss_sign: UnboundedReceiver<MessageIn>,
-        mut rx_tss_sign_init: UnboundedReceiver<SignInit>,
         mut rx_external_message: UnboundedReceiver<ExternalMessage>,
+        mut rx_sign_result: UnboundedReceiver<(SignInit, SignResult)>,
         mut rx_shutdown: ConditionalBroadcastReceiver,
     ) -> JoinHandle<()> {
-        let keygen_init = self.tss_party.create_keygen_init();
         tokio::spawn(async move {
             info!(
                 "Spawn external event for node with authority {:?}",
                 &self.authority_id
             );
-            let port = 50010 + self.authority_id.0;
-            let tofnd_client = TssParty::create_tofnd_client(port).await.unwrap();
-            tokio::select! {
-                _ = rx_shutdown.receiver.recv() => {
-                    warn!("Node is shuting down");
-                },
-                res = self.tss_party.execute_keygen(keygen_init.clone(), rx_tss_keygen) => {
-                    match res {
-                        Ok(KeygenResult { keygen_result_data }) => {
-                            if let Some(keygen_data) = keygen_result_data {
-                                // party.set_key(keygen_data).await;
-                                // let sign_init = party.create_sign_init(message.clone());
-                                info!("Tss keygen result {:?}", &keygen_data);
-                                // match party.execute_sign(sign_init, rx_sign).await {
-                                //     Ok(SignResult { sign_result_data }) => {
-                                //         info!("Sign result {:?}", &sign_result_data);
-                                //         if let Some(data) = sign_result_data {
-                                //             party.verify_sign_result(message, data).await;
-                                //         }
-                                //     },
-                                //     Err(e) => {
-                                //         info!("Sign error {:?}", e);
-                                //     },
-                                // }
-                            }
-                        }
-                        Err(e) => {
-                            warn!("Execute keygen error {:?}", e);
-                        }
-                    }
-                }
-            }
             loop {
                 tokio::select! {
                     _ = rx_shutdown.receiver.recv() => {
@@ -120,23 +84,39 @@ impl ScalarEventHandler {
                         Self::propose_event(authority, committee, event, network).await;
 
                     },
-                    Some(sign_init) = rx_tss_sign_init.recv() => {
-                        info!("{:?} Receive SignInit from ScalarEventService {:?}", &self.authority_id, &sign_init);
-                        // match self.tss_party.execute_sign(sign_init, rx_sign).await {
-                        //     Ok(SignResult { sign_result_data }) => {
-                        //         info!("Sign result {:?}", &sign_result_data);
-                        //         if let Some(data) = sign_result_data {
-                        //             party.verify_sign_result(message, data).await;
-                        //         }
-                        //     },
-                        //     Err(e) => {
-                        //         info!("Sign error {:?}", e);
-                        //     },
-                        // }
+                    Some((sign_init, sign_result)) = rx_sign_result.recv() => {
+                        info!("{:?} Received SignResult from TssParty {:?} {:?}", &self.authority_id, &sign_init, &sign_result);
+                        if let Some(sign_result_data) = sign_result.sign_result_data {
+                            match sign_result_data {
+                                SignResultData::Signature(sig) => {
+                                    self.submit_event_transaction(&sign_init, sig.clone());
+                                },
+                                SignResultData::Criminals(c) => {
+                                    warn!("Criminals {:?}", c);
+                                },
+                        }
+
+                        }
+
                     }
                 }
             }
+            info!(
+                "ScalarEvent handler is stopped by received shuting down signal {:?}",
+                &self.authority_id
+            );
         })
+    }
+    fn submit_event_transaction(
+        &self,
+        sign_init: &SignInit,
+        signature: Vec<u8>,
+    ) -> Result<(), anyhow::Error> {
+        info!(
+            "Submit event transaction for {:?} with signature {:?}",
+            sign_init, signature
+        );
+        Ok(())
     }
     // pub fn sign_message(&self, payload: [u8; 32]) -> MessageHeader {
     //     MessageHeader {
@@ -152,7 +132,6 @@ impl ScalarEventHandler {
         signature_service: SignatureService<Signature, { crypto::INTENT_MESSAGE_LENGTH }>,
         event_store: EventStore,
         network: Network,
-        tss_party: TssParty,
     ) -> Self {
         ScalarEventHandler {
             authority_id,
@@ -161,7 +140,6 @@ impl ScalarEventHandler {
             signature_service,
             event_store,
             network,
-            tss_party,
         }
     }
     pub fn spawn(
@@ -170,36 +148,18 @@ impl ScalarEventHandler {
         signature_service: SignatureService<Signature, { crypto::INTENT_MESSAGE_LENGTH }>,
         event_store: EventStore,
         network: Network,
-        tx_tss_keygen: UnboundedSender<MessageIn>,
-        tx_tss_sign: UnboundedSender<MessageIn>,
-        rx_tss_keygen: UnboundedReceiver<MessageIn>,
-        rx_tss_sign: UnboundedReceiver<MessageIn>,
-        rx_tss_sign_init: UnboundedReceiver<SignInit>,
+        rx_sign_result: UnboundedReceiver<(SignInit, SignResult)>,
         rx_external_message: UnboundedReceiver<ExternalMessage>,
         rx_shutdown: ConditionalBroadcastReceiver,
     ) -> JoinHandle<()> {
-        let tss_party = TssParty::new(
-            authority.clone(),
-            committee.clone(),
-            network.clone(),
-            tx_tss_keygen,
-            tx_tss_sign,
-        );
         let mut handler = ScalarEventHandler::new(
             authority.id(),
             committee,
             signature_service,
             event_store,
             network,
-            tss_party,
         );
-        handler.run(
-            rx_tss_keygen,
-            rx_tss_sign,
-            rx_tss_sign_init,
-            rx_external_message,
-            rx_shutdown,
-        )
+        handler.run(rx_external_message, rx_sign_result, rx_shutdown)
     }
     pub async fn propose_event(
         authority_id: AuthorityIdentifier,
@@ -313,7 +273,8 @@ impl ScalarEventService {
             message.len(),
             &message
         );
-        let sig_uid = String::from_utf8(message.clone()).unwrap();
+        //let sig_uid = format!("{:x?}", &event.digest().0);
+        let sig_uid = hex::encode(&event.digest().0);
         //Hash digest into Vec<u8> of 32 length
         SignInit {
             new_sig_uid: sig_uid,
@@ -343,13 +304,21 @@ impl ScalarEventService {
                     total_stake += authority.stake();
                 }
             }
-            if (total_stake > self.committee.quorum_threshold()) {
-                info!("Stake: {}/{}", total_stake, total_stake);
+            if total_stake >= self.committee.quorum_threshold() {
+                info!(
+                    "Stake: {}/{}",
+                    total_stake,
+                    self.committee.quorum_threshold()
+                );
                 //Request tss then create N&B Transaction
                 let sign_message = self.create_sign_init(&stored_event);
                 //Send message to tss signer
-                self.tx_tss_sign.send(sign_message);
-                //Create transaction
+                //Todo: Handle duplicate
+                if let Err(e) = self.tx_tss_sign.send(sign_message) {
+                    error!("Send sign message with error {:?}", e);
+                } else {
+                    info!("Send sign message successfully");
+                }
             }
         } else {
             info!("Stored event notfound, write peer's event into the storage");

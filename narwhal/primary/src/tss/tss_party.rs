@@ -1,5 +1,5 @@
-use std::{net::Ipv4Addr, sync::Arc};
-
+use super::TssSigner;
+use super::{create_tofnd_client, send};
 use anemo::{Network, PeerId};
 use anyhow::anyhow;
 use config::{Authority, Committee};
@@ -12,14 +12,17 @@ use k256::EncodedPoint;
 use k256::ProjectivePoint;
 use network::CancelOnDropHandler;
 use network::RetryConfig;
+use std::collections::VecDeque;
+use std::{net::Ipv4Addr, sync::Arc};
 use storage::TssStore;
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 use tokio::sync::RwLock;
 use tokio::task::JoinHandle;
+use tokio::time::Duration;
 use tokio_stream::wrappers::UnboundedReceiverStream;
 use tonic::transport::Channel;
-use tonic::Status;
-use tracing::{info, warn};
+use tonic::{Status, Streaming};
+use tracing::{error, info, warn};
 use types::message_out::keygen_result::KeygenResultData;
 use types::message_out::sign_result::SignResultData;
 use types::message_out::SignResult;
@@ -37,6 +40,9 @@ use types::{gg20_client::Gg20Client, KeygenInit};
 use types::{ConditionalBroadcastReceiver, SignInit};
 use uuid::Uuid;
 
+use crate::tss::tss_keygen;
+use crate::tss::tss_keygen::TssKeyGenerator;
+
 #[derive(Clone)]
 pub struct TssParty {
     authority: Authority,
@@ -44,7 +50,7 @@ pub struct TssParty {
     network: Network,
     tx_keygen: UnboundedSender<MessageIn>,
     tx_sign: UnboundedSender<MessageIn>,
-    tofnd_client: Option<Arc<RwLock<Gg20Client<Channel>>>>,
+    tx_tss_sign_result: UnboundedSender<(SignInit, SignResult)>,
 }
 impl TssParty {
     pub fn new(
@@ -53,6 +59,7 @@ impl TssParty {
         network: Network,
         tx_keygen: UnboundedSender<MessageIn>,
         tx_sign: UnboundedSender<MessageIn>,
+        tx_tss_sign_result: UnboundedSender<(SignInit, SignResult)>,
     ) -> Self {
         Self {
             authority,
@@ -60,7 +67,7 @@ impl TssParty {
             network,
             tx_keygen,
             tx_sign,
-            tofnd_client: None,
+            tx_tss_sign_result,
         }
     }
     pub async fn create_tofnd_client(port: u16) -> Option<Gg20Client<Channel>> {
@@ -88,17 +95,9 @@ impl TssParty {
             .collect::<Vec<String>>();
         party_uids
     }
-    pub fn create_keygen_init(&self) -> KeygenInit {
-        KeygenInit {
-            new_key_uid: format!("tss_session{}", self.committee.epoch()),
-            party_uids: self.get_parties(),
-            party_share_counts: vec![1, 1, 1, 1],
-            my_party_index: self.authority.id().0 as u32,
-            threshold: 2,
-        }
-    }
+
     //Tss sign only - 32 bytes hash digests
-    fn create_sign_init(&self, message: Vec<u8>) -> SignInit {
+    fn _create_sign_init(&self, message: Vec<u8>) -> SignInit {
         SignInit {
             new_sig_uid: uuid::Uuid::new_v4().to_string(),
             key_uid: format!("tss_session{}", self.committee.epoch()),
@@ -107,33 +106,14 @@ impl TssParty {
         }
     }
 
-    // async fn create_tofnd_client(&mut self) -> Option<Arc<RwLock<Gg20Client<Channel>>>> {
-    //     if self.tofnd_client.is_none() {
-    //         let tss_host =
-    //             std::env::var("TSS_HOST").unwrap_or_else(|_| Ipv4Addr::LOCALHOST.to_string());
-    //         let tss_port = std::env::var("TSS_PORT")
-    //             .ok()
-    //             .and_then(|p| p.parse::<u16>().ok())
-    //             .unwrap_or_else(|| 50010 + self.authority.id().0);
-    //         //+ authority.id().0;
-    //         let tss_addr = format!("http://{}:{}", tss_host, tss_port);
-    //         info!("TSS address {}", &tss_addr);
-
-    //         self.tofnd_client = Gg20Client::connect(tss_addr.clone())
-    //             .await
-    //             .map(|client| Arc::new(RwLock::new(client)))
-    //             .ok();
-    //     }
-    //     self.tofnd_client.clone()
-    // }
-    pub async fn execute_keygen(
+    pub async fn _execute_keygen(
         &self,
         keygen_init: KeygenInit,
         rx_keygen: UnboundedReceiver<MessageIn>,
     ) -> Result<KeygenResult, tonic::Status> {
         let my_uid = self.get_uid();
         let port = 50010 + self.authority.id().0;
-        match Self::create_tofnd_client(port).await {
+        let result = match Self::create_tofnd_client(port).await {
             None => Err(Status::not_found("tofnd client not found")),
             Some(mut client) => {
                 let mut keygen_server_outgoing = client
@@ -236,117 +216,98 @@ impl TssParty {
                 info!("party [{}] keygen execution complete", my_uid);
                 return result;
             }
-        }
+        };
+        //self.set_keygen(key_data);
+        result
     }
-    pub async fn execute_sign(
+    pub async fn _execute_sign(
         &self,
-        sign_init: SignInit,
-        rx_sign: UnboundedReceiver<MessageIn>,
+        sign_server_outgoing: &mut Streaming<MessageOut>,
+        sign_init: Option<SignInit>,
     ) -> Result<SignResult, tonic::Status> {
-        let my_uid = self.get_uid();
-        info!(
-            "Execute sign flow for message {:?}",
-            &sign_init.message_to_sign //String::from_utf8(sign_init.message_to_sign.to_vec())
-        );
-        let port = 50010 + self.authority.id().0;
-        match Self::create_tofnd_client(port).await {
-            None => Err(Status::not_found("tofnd client not found")),
-            Some(mut client) => {
-                info!("Call tss gRPC server for sign flow");
-                let mut sign_server_outgoing = client
-                    .sign(tonic::Request::new(UnboundedReceiverStream::new(rx_sign)))
-                    .await
-                    .unwrap()
-                    .into_inner();
-                info!("End Call tss gRPC server for sign flow");
-                #[allow(unused_variables)]
-                let all_share_count = sign_init.party_uids.len();
-                #[allow(unused_variables)]
-                let mut msg_count = 1;
-                // the first outbound message is keygen init info
-                info!("Send tss sign request to gRPC server");
-                self.tx_sign
-                    .send(MessageIn {
-                        data: Some(message_in::Data::SignInit(sign_init)),
-                    })
-                    .unwrap();
-                let result = loop {
-                    match sign_server_outgoing.message().await {
-                        Ok(Some(msg)) => {
-                            let msg_type = msg.data.as_ref().expect("missing data");
-                            match msg_type {
-                                #[allow(unused_variables)] // allow unsused traffin in non malicious
-                                message_out::Data::Traffic(traffic) => {
-                                    // in malicous case, if we are stallers we skip the message
-                                    #[cfg(feature = "malicious")]
-                                    {
-                                        let round =
-                                            sign_round(msg_count, all_share_count, my_share_count);
-                                        if self.malicious_data.timeout_round == round {
-                                            warn!(
-                                                "{} is stalling a message in round {}",
-                                                my_uid,
-                                                round - 4
-                                            ); // subtract keygen rounds
-                                            continue; // tough is the life of the staller
-                                        }
-                                        if self.malicious_data.disrupt_round == round {
-                                            warn!(
-                                                "{} is disrupting a message in round {}",
-                                                my_uid, round
-                                            );
-                                            let mut t = traffic.clone();
-                                            t.payload = traffic.payload
-                                                [0..traffic.payload.len() / 2]
-                                                .to_vec();
-                                            let mut m = msg.clone();
-                                            m.data = Some(proto::message_out::Data::Traffic(t));
-                                            self.deliver_sign(&m, my_uid);
-                                        }
-                                    }
-                                    self.deliver_sign(&msg, &my_uid).await;
-                                }
-                                message_out::Data::SignResult(res) => {
-                                    info!("party [{}] sign finished!", my_uid);
-                                    break Ok(res.clone());
-                                }
-                                message_out::Data::NeedRecover(_) => {
-                                    info!("party [{}] needs recover", my_uid);
-                                    // when recovery is needed, sign is canceled. We abort the protocol manualy instead of waiting parties to time out
-                                    // no worries that we don't wait for enough time, we will not be checking criminals in this case
-                                    // delivery.send_timeouts(0);
-                                    break Ok(SignResult::default());
-                                }
-                                _ => {
-                                    panic!(
-                                        "party [{}] sign error: bad outgoing message type",
-                                        my_uid
-                                    )
-                                }
-                            };
-                            msg_count += 1;
-                        }
-                        Ok(None) => {
-                            warn!(
-                                "party [{}] sign execution was not completed due to abort",
-                                my_uid
-                            );
-                            return Ok(SignResult::default());
-                        }
-
-                        Err(status) => {
-                            warn!(
-                            "party [{}] keygen execution was not completed due to connection error: {}",
-                            my_uid, status
-                        );
-                            return Err(status);
-                        }
-                    }
-                };
-                info!("party [{}] sign execution complete", my_uid);
-                return result;
-            }
+        if sign_init.is_none() {
+            return Err(tonic::Status::unavailable("SignInit unavailable"));
         }
+        let sign_init = sign_init.unwrap();
+        let my_uid = self.get_uid();
+        #[allow(unused_variables)]
+        let all_share_count = sign_init.party_uids.len();
+        #[allow(unused_variables)]
+        let mut msg_count = 1;
+        // the first outbound message is keygen init info
+        info!("Send tss sign request to gRPC server");
+        self.tx_sign
+            .send(MessageIn {
+                data: Some(message_in::Data::SignInit(sign_init)),
+            })
+            .unwrap();
+        let result = loop {
+            match sign_server_outgoing.message().await {
+                Ok(Some(msg)) => {
+                    let msg_type = msg.data.as_ref().expect("missing data");
+                    match msg_type {
+                        #[allow(unused_variables)] // allow unsused traffin in non malicious
+                        message_out::Data::Traffic(traffic) => {
+                            // in malicous case, if we are stallers we skip the message
+                            #[cfg(feature = "malicious")]
+                            {
+                                let round = sign_round(msg_count, all_share_count, my_share_count);
+                                if self.malicious_data.timeout_round == round {
+                                    warn!(
+                                        "{} is stalling a message in round {}",
+                                        my_uid,
+                                        round - 4
+                                    ); // subtract keygen rounds
+                                    continue; // tough is the life of the staller
+                                }
+                                if self.malicious_data.disrupt_round == round {
+                                    warn!("{} is disrupting a message in round {}", my_uid, round);
+                                    let mut t = traffic.clone();
+                                    t.payload =
+                                        traffic.payload[0..traffic.payload.len() / 2].to_vec();
+                                    let mut m = msg.clone();
+                                    m.data = Some(proto::message_out::Data::Traffic(t));
+                                    self.deliver_sign(&m, my_uid);
+                                }
+                            }
+                            self.deliver_sign(&msg, &my_uid).await;
+                        }
+                        message_out::Data::SignResult(res) => {
+                            info!("party [{}] sign finished!", my_uid);
+                            break Ok(res.clone());
+                        }
+                        message_out::Data::NeedRecover(_) => {
+                            info!("party [{}] needs recover", my_uid);
+                            // when recovery is needed, sign is canceled. We abort the protocol manualy instead of waiting parties to time out
+                            // no worries that we don't wait for enough time, we will not be checking criminals in this case
+                            // delivery.send_timeouts(0);
+                            break Ok(SignResult::default());
+                        }
+                        _ => {
+                            panic!("party [{}] sign error: bad outgoing message type", my_uid)
+                        }
+                    };
+                    msg_count += 1;
+                }
+                Ok(None) => {
+                    warn!(
+                        "party [{}] sign execution was not completed due to abort",
+                        my_uid
+                    );
+                    return Ok(SignResult::default());
+                }
+
+                Err(status) => {
+                    warn!(
+                        "party [{}] keygen execution was not completed due to connection error: {}",
+                        my_uid, status
+                    );
+                    return Err(status);
+                }
+            }
+        };
+        info!("party [{}] sign execution complete", my_uid);
+        return result;
     }
 
     pub async fn deliver_keygen(&self, msg: &MessageOut, from: &str) {
@@ -479,7 +440,7 @@ impl TssParty {
         //handlers
     }
 
-    pub async fn set_key(&mut self, key_data: KeygenResultData) {
+    pub async fn set_keygen(&mut self, key_data: KeygenResultData) {
         info!("Keygen result {:?}", &key_data);
         match key_data {
             KeygenResultData::Data(data) => {
@@ -529,93 +490,185 @@ impl TssParty {
     }
 }
 impl TssParty {
-    #[allow(clippy::too_many_arguments)]
-    #[must_use]
-    pub fn spawn(
-        &mut self,
+    pub fn run(
+        &self,
         rx_keygen: UnboundedReceiver<MessageIn>,
         rx_sign: UnboundedReceiver<MessageIn>,
+        mut rx_sign_init: UnboundedReceiver<SignInit>,
         mut rx_shutdown: ConditionalBroadcastReceiver,
     ) -> JoinHandle<()> {
-        let keygen_init = self.create_keygen_init();
-        // let mut message = uuid::Uuid::new_v4().as_bytes().to_vec();
-        // message.extend_from_slice(uuid::Uuid::new_v4().as_bytes());
-        let message = [42; 32].to_vec();
-        let mut party = self.clone();
+        let port = 50010 + self.authority.id().0;
+        let tss_keygen = TssKeyGenerator::new(
+            self.authority.clone(),
+            self.committee.clone(),
+            self.network.clone(),
+            self.tx_keygen.clone(),
+        );
+        let mut tss_signer = TssSigner::new(
+            self.authority.clone(),
+            self.committee.clone(),
+            self.network.clone(),
+            self.tx_sign.clone(),
+        );
+        let tx_sign = self.tx_sign.clone();
+        let tx_sign_result = self.tx_tss_sign_result.clone();
+        let uid = self.get_uid();
+        let authority_id = self.authority.id().0;
         tokio::spawn(async move {
-            tokio::select! {
-                _ = rx_shutdown.receiver.recv() => {
-                    warn!("Node is shuting down");
-                },
-                res = party.execute_keygen(keygen_init.clone(), rx_keygen) => {
-                    match res {
-                        Ok(KeygenResult { keygen_result_data }) => {
-                            if let Some(keygen_data) = keygen_result_data {
-                                party.set_key(keygen_data).await;
-                                let sign_init = party.create_sign_init(message.clone());
-                                info!("Starting sign flow for message {:?}", &sign_init);
-
-                                match party.execute_sign(sign_init, rx_sign).await {
-                                    Ok(SignResult { sign_result_data }) => {
-                                        info!("Sign result {:?}", &sign_result_data);
-                                        if let Some(data) = sign_result_data {
-                                            party.verify_sign_result(message, data).await;
-                                        }
+            info!("Init TssParty node, starting keygen process");
+            let mut shuting_down = false;
+            if let Ok(mut client) = create_tofnd_client(port).await {
+                let mut keygen_server_outgoing = client
+                    .keygen(tonic::Request::new(UnboundedReceiverStream::new(rx_keygen)))
+                    .await
+                    .unwrap()
+                    .into_inner();
+                let timer = tokio::time::sleep(Duration::from_millis(1));
+                tokio::pin!(timer);
+                //Send a keygen_init message to the keygen channel
+                tss_keygen.init_keygen();
+                //Loop until keygen flow is finished
+                loop {
+                    tokio::select! {
+                        _ = rx_shutdown.receiver.recv() => {
+                            warn!("Node is shuting down");
+                            shuting_down = true;
+                            break;
+                        },
+                        msg_out = keygen_server_outgoing.message() =>  match msg_out {
+                            Ok(Some(msg)) => {
+                                match tss_keygen.handle_keygen_message(msg).await {
+                                    Ok(Some(res)) => {
+                                        info!("Keygen result {:?}", &res);
+                                        break;
+                                    },
+                                    Ok(None) => {
+                                        info!("Continue keygen flow ...");
                                     },
                                     Err(e) => {
-                                        info!("Sign error {:?}", e);
+                                        error!("Error {:?}", e);
+                                        break;
                                     },
                                 }
-                            }
-                        }
-                        Err(e) => {
-                            warn!("Execute keygen error {:?}", e);
+                            },
+                            Ok(None) => {
+                                warn!(
+                                    "party [{}] keygen execution was not completed due to abort",
+                                    &uid
+                                );
+                                break;
+                            },
+                            Err(e) => {
+                                error!("Get message from tofnd's keygen server with error {:?}", e);
+                                break;
+                            },
+                        },
+                        _ = timer.as_mut() => {}
+                    }
+                }
+
+                //Waiting for sign message
+                let mut sign_server_outgoing = client
+                    .sign(tonic::Request::new(UnboundedReceiverStream::new(rx_sign)))
+                    .await
+                    .unwrap()
+                    .into_inner();
+                // 2023 Sep 21
+                // Todo: Improve TssComponent, currently sign message one by one
+                let mut signing_deque: VecDeque<SignInit> = VecDeque::new();
+                let mut signing_message: Option<SignInit> = None;
+                info!(
+                    "Finished keygen process, loop for handling sign messsage. Shuting_down {}",
+                    shuting_down
+                );
+                if !shuting_down {
+                    loop {
+                        tokio::select! {
+                            _ = rx_shutdown.receiver.recv() => {
+                                warn!("Node is shuting down");
+                                shuting_down = true;
+                                break;
+                            },
+                            Some(sign_init) = rx_sign_init.recv() => {
+                                info!("Received sign init {:?}", &sign_init);
+                                if signing_message.is_some() {
+                                    //Put signint message into queue
+                                    info!("There is some message is signing. Push current message into the queue");
+                                    let current = signing_message.as_ref().unwrap();
+                                    if current.new_sig_uid != sign_init.new_sig_uid {
+                                        signing_deque.push_front(sign_init);
+                                    }
+                                } else {
+                                    info!("Perform signing flow for current message");
+                                    signing_message.insert(sign_init.clone());
+                                    let message = message_in::Data::SignInit(sign_init);
+                                    tss_signer.send_sign_message(Some(message)).await;
+                                }
+                            },
+                            msg_out = sign_server_outgoing.message() => match msg_out {
+                                Ok(Some(msg)) => {
+                                    match tss_signer.handle_tss_message(msg).await {
+                                        Ok(Some(sign_result))=>{
+                                            if let Some(sign_init) = signing_message.take() {
+                                                // tss_signer only prints log result to the console
+                                                tss_signer.handle_sign_result(&sign_init, &sign_result).await;
+                                                tx_sign_result.send((sign_init, sign_result));
+                                            }
+                                            signing_message = signing_deque.pop_back();
+                                            if signing_message.is_some() {
+                                                info!("Pop next message from the queue for signing flow {:?}", &signing_message);
+                                                let message = message_in::Data::SignInit(signing_message.as_ref().unwrap().clone());
+                                                tss_signer.send_sign_message(Some(message));
+                                            }
+                                        }
+                                        Ok(None) => {
+                                            info!("Tss server continue working!");
+                                        }
+                                        Err(e) => {
+                                            error!("Error from tss sining process {:?}", e);
+                                        }
+                                    }
+                                },
+                                Ok(None) => {
+                                   // info!("Receive nothing from tofnd server!");
+                                },
+                                Err(e) => {
+                                    error!("Get message from tofnd's signing server with error {:?}", e);
+                                },
+                            },
+                            _ = timer.as_mut() => {}
                         }
                     }
                 }
+                info!(
+                    "TssParty node {:?} stopped by received shuting down signal",
+                    uid
+                );
             }
         })
     }
-}
-
-fn send<F, R, Fut>(
-    network: anemo::Network,
-    peer: NetworkPublicKey,
-    f: F,
-) -> CancelOnDropHandler<anyhow::Result<anemo::Response<R>>>
-where
-    F: Fn(anemo::Peer) -> Fut + Send + Sync + 'static + Clone,
-    R: Send + Sync + 'static + Clone,
-    Fut: std::future::Future<Output = Result<anemo::Response<R>, anemo::rpc::Status>> + Send,
-{
-    // Safety
-    // Since this spawns an unbounded task, this should be called in a time-restricted fashion.
-
-    let peer_id = PeerId(peer.0.to_bytes());
-    let message_send = move || {
-        let network = network.clone();
-        let f = f.clone();
-
-        async move {
-            if let Some(peer) = network.peer(peer_id) {
-                f(peer).await.map_err(|e| {
-                    // this returns a backoff::Error::Transient
-                    // so that if anemo::Status is returned, we retry
-                    backoff::Error::transient(anyhow::anyhow!("RPC error: {e:?}"))
-                })
-            } else {
-                Err(backoff::Error::transient(anyhow::anyhow!(
-                    "not connected to peer {peer_id}"
-                )))
-            }
-        }
-    };
-
-    let retry_config = RetryConfig {
-        retrying_max_elapsed_time: None, // retry forever
-        ..Default::default()
-    };
-    let task = tokio::spawn(retry_config.retry(message_send));
-
-    CancelOnDropHandler(task)
+    #[allow(clippy::too_many_arguments)]
+    #[must_use]
+    pub fn spawn(
+        authority: Authority,
+        committee: Committee,
+        network: Network,
+        tx_keygen: UnboundedSender<MessageIn>,
+        rx_keygen: UnboundedReceiver<MessageIn>,
+        tx_sign: UnboundedSender<MessageIn>,
+        rx_sign: UnboundedReceiver<MessageIn>,
+        rx_tss_sign_init: UnboundedReceiver<SignInit>,
+        tx_tss_sign_result: UnboundedSender<(SignInit, SignResult)>,
+        rx_shutdown: ConditionalBroadcastReceiver,
+    ) -> JoinHandle<()> {
+        let mut tss_party = TssParty::new(
+            authority.clone(),
+            committee.clone(),
+            network.clone(),
+            tx_keygen,
+            tx_sign,
+            tx_tss_sign_result,
+        );
+        tss_party.run(rx_keygen, rx_sign, rx_tss_sign_init, rx_shutdown)
+    }
 }

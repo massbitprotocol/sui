@@ -6984,6 +6984,7 @@ dependencies = [
  "fastcrypto",
  "futures 0.3.25",
  "governor",
+ "hex",
  "indexmap 1.9.3",
  "itertools 0.10.5",
  "k256 0.13.1",
