@@ -510,7 +510,6 @@ impl TssParty {
             self.network.clone(),
             self.tx_sign.clone(),
         );
-        let tx_sign = self.tx_sign.clone();
         let tx_sign_result = self.tx_tss_sign_result.clone();
         let uid = self.get_uid();
         let authority_id = self.authority.id().0;
@@ -523,7 +522,7 @@ impl TssParty {
                     .await
                     .unwrap()
                     .into_inner();
-                let timer = tokio::time::sleep(Duration::from_millis(1));
+                let timer = tokio::time::sleep(Duration::from_millis(10));
                 tokio::pin!(timer);
                 //Send a keygen_init message to the keygen channel
                 tss_keygen.init_keygen();
@@ -573,10 +572,6 @@ impl TssParty {
                     .await
                     .unwrap()
                     .into_inner();
-                // 2023 Sep 21
-                // Todo: Improve TssComponent, currently sign message one by one
-                let mut signing_deque: VecDeque<SignInit> = VecDeque::new();
-                let mut signing_message: Option<SignInit> = None;
                 info!(
                     "Finished keygen process, loop for handling sign messsage. Shuting_down {}",
                     shuting_down
@@ -591,51 +586,17 @@ impl TssParty {
                             },
                             Some(sign_init) = rx_sign_init.recv() => {
                                 info!("Received sign init {:?}", &sign_init);
-                                if signing_message.is_some() {
-                                    //Put signint message into queue
-                                    info!("There is some message is signing. Push current message into the queue");
-                                    let current = signing_message.as_ref().unwrap();
-                                    if current.new_sig_uid != sign_init.new_sig_uid {
-                                        signing_deque.push_front(sign_init);
-                                    }
-                                } else {
-                                    info!("Perform signing flow for current message");
-                                    signing_message.insert(sign_init.clone());
-                                    let message = message_in::Data::SignInit(sign_init);
-                                    tss_signer.send_sign_message(Some(message)).await;
+                                match tss_signer.sign_execute(&mut sign_server_outgoing, &sign_init).await {
+                                    Ok(sign_result) => {
+                                        info!("Sign result {:?}", &sign_result);
+                                        tx_sign_result.send((sign_init, sign_result));
+                                    },
+                                    Err(e) => {
+                                        error!("Sign error {:?}", e);
+                                    },
                                 }
                             },
-                            msg_out = sign_server_outgoing.message() => match msg_out {
-                                Ok(Some(msg)) => {
-                                    match tss_signer.handle_tss_message(msg).await {
-                                        Ok(Some(sign_result))=>{
-                                            if let Some(sign_init) = signing_message.take() {
-                                                // tss_signer only prints log result to the console
-                                                tss_signer.handle_sign_result(&sign_init, &sign_result).await;
-                                                tx_sign_result.send((sign_init, sign_result));
-                                            }
-                                            signing_message = signing_deque.pop_back();
-                                            if signing_message.is_some() {
-                                                info!("Pop next message from the queue for signing flow {:?}", &signing_message);
-                                                let message = message_in::Data::SignInit(signing_message.as_ref().unwrap().clone());
-                                                tss_signer.send_sign_message(Some(message));
-                                            }
-                                        }
-                                        Ok(None) => {
-                                            info!("Tss server continue working!");
-                                        }
-                                        Err(e) => {
-                                            error!("Error from tss sining process {:?}", e);
-                                        }
-                                    }
-                                },
-                                Ok(None) => {
-                                   // info!("Receive nothing from tofnd server!");
-                                },
-                                Err(e) => {
-                                    error!("Get message from tofnd's signing server with error {:?}", e);
-                                },
-                            },
+
                             _ = timer.as_mut() => {}
                         }
                     }

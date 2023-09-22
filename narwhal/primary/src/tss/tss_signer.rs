@@ -9,6 +9,7 @@ use tokio::sync::mpsc::{error::SendError, UnboundedReceiver, UnboundedSender};
 use tokio_stream::wrappers::UnboundedReceiverStream;
 use tonic::Response;
 use tonic::Status;
+use tonic::Streaming;
 use tracing::{info, warn};
 use types::{
     message_in,
@@ -158,6 +159,90 @@ impl TssSigner {
         data: Option<message_in::Data>,
     ) -> Result<(), SendError<MessageIn>> {
         self.tx_sign.send(MessageIn { data })
+    }
+    pub async fn sign_execute(
+        &self,
+        sign_server_outgoing: &mut Streaming<MessageOut>,
+        sign_init: &SignInit,
+    ) -> Result<SignResult, tonic::Status> {
+        #[allow(unused_variables)]
+        let all_share_count = sign_init.party_uids.len();
+        #[allow(unused_variables)]
+        let mut msg_count = 1;
+        // the first outbound message is keygen init info
+        info!("Send tss sign request to gRPC server");
+        self.tx_sign
+            .send(MessageIn {
+                data: Some(message_in::Data::SignInit(sign_init.clone())),
+            })
+            .unwrap();
+        let my_uid = self.uid.clone();
+        let result = loop {
+            match sign_server_outgoing.message().await {
+                Ok(Some(msg)) => {
+                    let msg_type = msg.data.as_ref().expect("missing data");
+                    match msg_type {
+                        #[allow(unused_variables)] // allow unsused traffin in non malicious
+                        message_out::Data::Traffic(traffic) => {
+                            // in malicous case, if we are stallers we skip the message
+                            #[cfg(feature = "malicious")]
+                            {
+                                let round = sign_round(msg_count, all_share_count, my_share_count);
+                                if self.malicious_data.timeout_round == round {
+                                    warn!(
+                                        "{} is stalling a message in round {}",
+                                        my_uid,
+                                        round - 4
+                                    ); // subtract keygen rounds
+                                    continue; // tough is the life of the staller
+                                }
+                                if self.malicious_data.disrupt_round == round {
+                                    warn!("{} is disrupting a message in round {}", my_uid, round);
+                                    let mut t = traffic.clone();
+                                    t.payload =
+                                        traffic.payload[0..traffic.payload.len() / 2].to_vec();
+                                    let mut m = msg.clone();
+                                    m.data = Some(proto::message_out::Data::Traffic(t));
+                                    self.deliver_sign(&m);
+                                }
+                            }
+                            self.deliver_sign(&msg).await;
+                        }
+                        message_out::Data::SignResult(res) => {
+                            info!("party [{}] sign finished with result {:?}", my_uid, res);
+                            break Ok(res.clone());
+                        }
+                        message_out::Data::NeedRecover(_) => {
+                            info!("party [{}] needs recover", my_uid);
+                            // when recovery is needed, sign is canceled. We abort the protocol manualy instead of waiting parties to time out
+                            // no worries that we don't wait for enough time, we will not be checking criminals in this case
+                            // delivery.send_timeouts(0);
+                            break Ok(SignResult::default());
+                        }
+                        _ => {
+                            panic!("party [{}] sign error: bad outgoing message type", my_uid)
+                        }
+                    };
+                    msg_count += 1;
+                }
+                Ok(None) => {
+                    warn!(
+                        "party [{}] sign execution was not completed due to abort",
+                        my_uid
+                    );
+                    return Ok(SignResult::default());
+                }
+
+                Err(status) => {
+                    warn!(
+                        "party [{}] keygen execution was not completed due to connection error: {}",
+                        my_uid, status
+                    );
+                    return Err(status);
+                }
+            }
+        };
+        result
     }
     pub async fn deliver_sign(&self, msg: &MessageOut) {
         let msg = msg.data.as_ref().expect("missing data");
