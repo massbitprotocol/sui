@@ -516,6 +516,7 @@ impl TssParty {
         tokio::spawn(async move {
             info!("Init TssParty node, starting keygen process");
             let mut shuting_down = false;
+            let mut keygened = false;
             if let Ok(mut client) = create_tofnd_client(port).await {
                 let mut keygen_server_outgoing = client
                     .keygen(tonic::Request::new(UnboundedReceiverStream::new(rx_keygen)))
@@ -524,46 +525,51 @@ impl TssParty {
                     .into_inner();
                 let timer = tokio::time::sleep(Duration::from_millis(10));
                 tokio::pin!(timer);
-                //Send a keygen_init message to the keygen channel
-                tss_keygen.init_keygen();
-                //Loop until keygen flow is finished
-                loop {
-                    tokio::select! {
-                        _ = rx_shutdown.receiver.recv() => {
-                            warn!("Node is shuting down");
-                            shuting_down = true;
-                            break;
+                tokio::select! {
+                    _ = rx_shutdown.receiver.recv() => {
+                        warn!("Node is shuting down");
+                        shuting_down = true;
+                    },
+                    keygen_result = tss_keygen.keygen_execute(&mut keygen_server_outgoing) => match keygen_result {
+                        Ok(res) => {
+                            info!("Keygen result {:?}", &res);
+                            //Todo: Send keygen result to Evm Relayer to update external public key
+                            keygened = true;
                         },
-                        msg_out = keygen_server_outgoing.message() =>  match msg_out {
-                            Ok(Some(msg)) => {
-                                match tss_keygen.handle_keygen_message(msg).await {
-                                    Ok(Some(res)) => {
-                                        info!("Keygen result {:?}", &res);
-                                        break;
-                                    },
-                                    Ok(None) => {
-                                        info!("Continue keygen flow ...");
-                                    },
-                                    Err(e) => {
-                                        error!("Error {:?}", e);
-                                        break;
-                                    },
-                                }
-                            },
-                            Ok(None) => {
-                                warn!(
-                                    "party [{}] keygen execution was not completed due to abort",
-                                    &uid
-                                );
-                                break;
-                            },
-                            Err(e) => {
-                                error!("Get message from tofnd's keygen server with error {:?}", e);
-                                break;
-                            },
+                        Err(e) => {
+                            error!("Keygen Error {:?}", e);
+
                         },
-                        _ = timer.as_mut() => {}
                     }
+                    // msg_out = keygen_server_outgoing.message() =>  match msg_out {
+                    //     Ok(Some(msg)) => {
+                    //         match tss_keygen.handle_keygen_message(msg).await {
+                    //             Ok(Some(res)) => {
+                    //                 info!("Keygen result {:?}", &res);
+                    //                 break;
+                    //             },
+                    //             Ok(None) => {
+                    //                 info!("Continue keygen flow ...");
+                    //             },
+                    //             Err(e) => {
+                    //                 error!("Error {:?}", e);
+                    //                 break;
+                    //             },
+                    //         }
+                    //     },
+                    //     Ok(None) => {
+                    //         warn!(
+                    //             "party [{}] keygen execution was not completed due to abort",
+                    //             &uid
+                    //         );
+                    //         break;
+                    //     },
+                    //     Err(e) => {
+                    //         error!("Get message from tofnd's keygen server with error {:?}", e);
+                    //         break;
+                    //     },
+                    // },
+                    // _ = timer.as_mut() => {}
                 }
 
                 //Waiting for sign message

@@ -13,6 +13,7 @@ use narwhal_network::client::NetworkClient;
 use narwhal_node::primary_node::PrimaryNode;
 use narwhal_node::worker_node::WorkerNodes;
 use narwhal_node::{CertificateStoreCacheMetrics, NodeStorage};
+use narwhal_types::ScalarEventTransaction;
 use narwhal_worker::TransactionValidator;
 use prometheus::{register_int_gauge_with_registry, IntGauge, Registry};
 use scalar_chain_ethereum::EvmRelayer;
@@ -24,6 +25,7 @@ use std::time::Instant;
 use sui_protocol_config::{ProtocolConfig, ProtocolVersion};
 use sui_types::crypto::{AuthorityKeyPair, NetworkKeyPair};
 use tokio::sync::mpsc;
+use tokio::sync::mpsc::UnboundedReceiver;
 use tokio::sync::Mutex;
 use tracing::info;
 #[derive(PartialEq)]
@@ -150,6 +152,7 @@ impl NarwhalManager {
         worker_cache: WorkerCache,
         execution_state: Arc<State>,
         tx_validator: TxValidator,
+        rx_scalar_trans: UnboundedReceiver<Vec<ScalarEventTransaction>>,
     ) where
         State: ExecutionState + Send + Sync + 'static,
     {
@@ -178,13 +181,15 @@ impl NarwhalManager {
             committee.epoch(),
             protocol_config.version
         );
-
+        //let (tx_scalar_transaction, rx_scalar_transaction) = mpsc::unbounded_channel();
         // start primary
         const MAX_PRIMARY_RETRIES: u32 = 2;
         let mut primary_retries = 0;
         let mut tx_external_message = None;
+        //let (tx_scalar_trans, rx_scalar_trans) = mpsc::unbounded_channel();
+        let mut rx_scalar_transaction = Arc::new(Mutex::new(rx_scalar_trans));
         loop {
-            let (tx, rx) = mpsc::unbounded_channel();
+            let (tx_event, rx_event) = mpsc::unbounded_channel();
             match self
                 .primary_node
                 .start(
@@ -196,12 +201,12 @@ impl NarwhalManager {
                     network_client.clone(),
                     &store,
                     execution_state.clone(),
-                    rx,
+                    rx_event,
                 )
                 .await
             {
                 Ok(_) => {
-                    tx_external_message = Some(tx);
+                    tx_external_message = Some(tx_event);
                     break;
                 }
                 Err(e) => {
@@ -229,6 +234,7 @@ impl NarwhalManager {
                     network_client.clone(),
                     execution_state.clone(),
                     tx_external_message.clone(),
+                    rx_scalar_transaction.clone(),
                 )
                 .await
             {

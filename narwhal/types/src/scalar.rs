@@ -17,6 +17,12 @@ impl ExternalMessage {
         Self { block }
     }
 }
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct ScalarEventTransaction {
+    pub payload: Vec<u8>,
+    pub tss_signature: Vec<u8>,
+}
 #[derive(Clone, Debug, Serialize, Deserialize, Eq, PartialEq, Hash)]
 pub struct EventDigest(pub [u8; crypto::DIGEST_LENGTH]);
 #[derive(Clone, Debug, Serialize, Deserialize)]

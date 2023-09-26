@@ -14,7 +14,8 @@ axum.workspace = true
 anyhow.workspace = true
 clap.workspace = true
 prometheus.workspace = true
-tokio = { workspace = true, features = ["full"] }
+#tokio = { workspace = true, features = ["full"] }
+tokio = { workspace = true, features = ["full", "tracing", "test-util"] }
 tracing.workspace = true
 futures.workspace = true
 tower.workspace = true

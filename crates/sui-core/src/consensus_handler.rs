@@ -8,6 +8,7 @@ use crate::authority::AuthorityMetrics;
 use crate::checkpoints::{
     CheckpointService, CheckpointServiceNotify, PendingCheckpoint, PendingCheckpointInfo,
 };
+use crate::scalar_transaction_handler::AsyncScalarTransactionScheduler;
 use std::cmp::Ordering;
 
 use crate::scoring_decision::update_low_scoring_authorities;
@@ -20,7 +21,7 @@ use lru::LruCache;
 use mysten_metrics::{monitored_scope, spawn_monitored_task};
 use narwhal_config::Committee;
 use narwhal_executor::{ExecutionIndices, ExecutionState};
-use narwhal_types::{BatchAPI, CertificateAPI, ConsensusOutput, HeaderAPI};
+use narwhal_types::{BatchAPI, CertificateAPI, ConsensusOutput, HeaderAPI, ScalarEventTransaction};
 use parking_lot::Mutex;
 use serde::{Deserialize, Serialize};
 use std::collections::hash_map::DefaultHasher;
@@ -32,6 +33,7 @@ use sui_protocol_config::ConsensusTransactionOrdering;
 use sui_types::base_types::{AuthorityName, EpochId, TransactionDigest};
 use sui_types::storage::ParentSync;
 use sui_types::transaction::{SenderSignedData, VerifiedTransaction};
+use tokio::sync::mpsc::UnboundedSender;
 
 use sui_types::executable_transaction::VerifiedExecutableTransaction;
 use sui_types::messages_consensus::{
@@ -59,6 +61,7 @@ pub struct ConsensusHandler<T> {
     /// Lru cache to quickly discard transactions processed by consensus
     processed_cache: Mutex<LruCache<SequencedConsensusTransactionKey, ()>>,
     transaction_scheduler: AsyncTransactionScheduler,
+    scalar_transaction_scheduler: AsyncScalarTransactionScheduler,
 }
 
 const PROCESSED_CACHE_CAP: usize = 1024 * 1024;
@@ -73,6 +76,7 @@ impl<T> ConsensusHandler<T> {
         authority_names_to_hostnames: HashMap<AuthorityName, String>,
         committee: Committee,
         metrics: Arc<AuthorityMetrics>,
+        tx_scalar_trans: UnboundedSender<Vec<ScalarEventTransaction>>,
     ) -> Self {
         // last_consensus_index is zero at the beginning of epoch, including for hash.
         // It needs to be recovered on restart to ensure consistent consensus hash.
@@ -82,6 +86,8 @@ impl<T> ConsensusHandler<T> {
         let last_seen = Mutex::new(last_consensus_index);
         let transaction_scheduler =
             AsyncTransactionScheduler::start(transaction_manager, epoch_store.clone());
+        let scalar_transaction_scheduler =
+            AsyncScalarTransactionScheduler::start(tx_scalar_trans, epoch_store.clone());
         Self {
             epoch_store,
             last_seen,
@@ -95,6 +101,7 @@ impl<T> ConsensusHandler<T> {
                 NonZeroUsize::new(PROCESSED_CACHE_CAP).unwrap(),
             )),
             transaction_scheduler,
+            scalar_transaction_scheduler,
         }
     }
 }
@@ -194,6 +201,7 @@ impl<T: ParentSync + Send + Sync> ExecutionState for ConsensusHandler<T> {
             .consensus_committed_subdags
             .with_label_values(&[&leader_author.to_string()])
             .inc();
+        let mut scalar_transactions = Vec::new();
         for (cert, batches) in consensus_output
             .sub_dag
             .certificates
@@ -212,33 +220,47 @@ impl<T: ParentSync + Send + Sync> ExecutionState for ConsensusHandler<T> {
                 self.metrics.consensus_handler_processed_batches.inc();
                 for serialized_transaction in batch.transactions() {
                     bytes += serialized_transaction.len();
-
-                    let transaction = match bcs::from_bytes::<ConsensusTransaction>(
-                        serialized_transaction,
-                    ) {
-                        Ok(transaction) => transaction,
+                    match bcs::from_bytes::<ConsensusTransaction>(serialized_transaction) {
+                        Ok(transaction) => {
+                            self.metrics
+                                .consensus_handler_processed
+                                .with_label_values(&[classify(&transaction)])
+                                .inc();
+                            let transaction =
+                                SequencedConsensusTransactionKind::External(transaction);
+                            transactions.push((
+                                serialized_transaction.clone(),
+                                transaction,
+                                output_cert.clone(),
+                            ));
+                        }
                         Err(err) => {
                             // This should have been prevented by Narwhal batch verification.
-                            panic!(
-                                "Unexpected malformed transaction (failed to deserialize): {}\nCertificate={:?} BatchDigest={:?} Transaction={:?}",
-                                err, output_cert, batch.digest(), serialized_transaction
-                            );
+                            // Todo: add ScalarEventTransaction handler
+                            let scalar_event_transaction = match bcs::from_bytes::<
+                                ScalarEventTransaction,
+                            >(
+                                serialized_transaction
+                            ) {
+                                Ok(transaction) => {
+                                    scalar_transactions.push(transaction);
+                                }
+                                Err(err) => {
+                                    panic!(
+                                        "Unexpected malformed transaction (failed to deserialize): {}\nCertificate={:?} BatchDigest={:?} Transaction={:?}",
+                                        err, output_cert, batch.digest(), serialized_transaction
+                                    );
+                                }
+                            };
+                            info!("ScalarEventTransaction: {:?}", &scalar_event_transaction);
                         }
                     };
-                    self.metrics
-                        .consensus_handler_processed
-                        .with_label_values(&[classify(&transaction)])
-                        .inc();
-                    let transaction = SequencedConsensusTransactionKind::External(transaction);
-                    transactions.push((
-                        serialized_transaction.clone(),
-                        transaction,
-                        output_cert.clone(),
-                    ));
                 }
             }
         }
-
+        self.scalar_transaction_scheduler
+            .schedule(scalar_transactions)
+            .await;
         let mut roots = BTreeSet::new();
 
         {

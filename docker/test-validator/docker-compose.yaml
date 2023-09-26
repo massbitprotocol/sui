@@ -1,6 +1,21 @@
 version: "3.9"
 
 services:
+  axelar-local:
+    build:
+      context: ./
+      dockerfile: Dockerfile.chains
+    container_name: axelar-local
+    restart: always
+    volumes:
+      - ../../../axelar:/axelar:rw
+    working_dir: /axelar
+    command: "sleep infinity"
+    ports:
+      - 8500:8500
+      - 8550:3000
+    tty: true    
+
   validator-builder:
     build:
       context: ../..

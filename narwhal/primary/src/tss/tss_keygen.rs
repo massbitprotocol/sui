@@ -43,7 +43,105 @@ impl TssKeyGenerator {
             tx_keygen,
         }
     }
+    pub async fn keygen_execute(
+        &self,
+        keygen_server_outgoing: &mut Streaming<MessageOut>,
+    ) -> Result<KeygenResult, tonic::Status> {
+        let party_uids = self
+            .committee
+            .authorities()
+            .map(|authority| PeerId(authority.network_key().0.to_bytes()).to_string())
+            .collect::<Vec<String>>();
+        let keygen_init = KeygenInit {
+            new_key_uid: format!("tss_session{}", self.committee.epoch()),
+            party_uids,
+            party_share_counts: vec![1, 1, 1, 1],
+            my_party_index: self.authority.id().0 as u32,
+            threshold: 2,
+        };
+        #[allow(unused_variables)]
+        let all_share_count = {
+            if keygen_init.party_share_counts.is_empty() {
+                keygen_init.party_uids.len()
+            } else {
+                keygen_init.party_share_counts.iter().sum::<u32>() as usize
+            }
+        };
+        #[allow(unused_variables)]
+        let my_share_count = {
+            if keygen_init.party_share_counts.is_empty() {
+                1
+            } else {
+                keygen_init.party_share_counts[keygen_init.my_party_index as usize] as usize
+            }
+        };
+        // the first outbound message is keygen init info
+        self.tx_keygen
+            .send(MessageIn {
+                data: Some(message_in::Data::KeygenInit(keygen_init)),
+            })
+            .unwrap();
+        let my_uid = self.uid.clone();
+        #[allow(unused_variables)]
+        let mut msg_count = 1;
+        let result = loop {
+            match keygen_server_outgoing.message().await {
+                Ok(Some(msg)) => {
+                    let msg_type = msg.data.as_ref().expect("missing data");
+                    match msg_type {
+                        #[allow(unused_variables)] // allow unsused traffin in non malicious
+                        message_out::Data::Traffic(traffic) => {
+                            // in malicous case, if we are stallers we skip the message
+                            #[cfg(feature = "malicious")]
+                            {
+                                let round =
+                                    keygen_round(msg_count, all_share_count, my_share_count);
+                                if self.malicious_data.timeout_round == round {
+                                    warn!("{} is stalling a message in round {}", my_uid, round);
+                                    continue; // tough is the life of the staller
+                                }
+                                if self.malicious_data.disrupt_round == round {
+                                    warn!("{} is disrupting a message in round {}", my_uid, round);
+                                    let mut t = traffic.clone();
+                                    t.payload =
+                                        traffic.payload[0..traffic.payload.len() / 2].to_vec();
+                                    let mut m = msg.clone();
+                                    m.data = Some(proto::message_out::Data::Traffic(t));
+                                    self.deliver_keygen(&m).await;
+                                }
+                            }
+                            self.deliver_keygen(&msg).await;
+                        }
+                        message_out::Data::KeygenResult(res) => {
+                            info!("party [{}] keygen finished!", my_uid);
+                            break Ok(res.clone());
+                        }
+                        _ => {
+                            panic!("party [{}] keygen error: bad outgoing message type", my_uid)
+                        }
+                    };
+                    msg_count += 1;
+                }
+                Ok(None) => {
+                    warn!(
+                        "party [{}] keygen execution was not completed due to abort",
+                        my_uid
+                    );
+                    return Ok(KeygenResult::default());
+                }
 
+                Err(status) => {
+                    warn!(
+                        "party [{}] keygen execution was not completed due to connection error: {}",
+                        my_uid, status
+                    );
+                    return Err(status);
+                }
+            }
+        };
+        info!("party [{}] keygen execution complete", my_uid);
+        return result;
+    }
     pub fn init_keygen(&self) {
         let party_uids = self
             .committee

@@ -499,7 +499,7 @@ impl Primary {
             network.clone(),
         );
 
-        let signature_service = SignatureService::new(signer);
+        let signature_service = SignatureService::new(signer.copy());
         let tss_handle = TssParty::spawn(
             authority.clone(),
             committee.clone(),
@@ -513,8 +513,10 @@ impl Primary {
             tx_shutdown.subscribe(),
         );
         let scalar_event_handle = ScalarEventHandler::spawn(
+            signer.copy(),
             authority.clone(),
             committee.clone(),
+            worker_cache.clone(),
             signature_service,
             event_store,
             network.clone(),

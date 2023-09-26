@@ -1,32 +1,53 @@
 use crate::tss::{TssParty, TssSigner};
 use anemo::{Network, PeerId};
-use config::Authority;
+use bytes::Bytes;
 use config::{committee, AuthorityIdentifier, Committee, Epoch};
+use config::{Authority, WorkerCache};
 use core::time::Duration;
-use crypto::{NetworkPublicKey, Signature};
-use fastcrypto::{hash::Digest, signature_service::SignatureService};
+use crypto::{KeyPair, NetworkPublicKey, Signature};
+use fastcrypto::{
+    hash::Digest,
+    signature_service::SignatureService,
+    traits::{KeyPair as _, VerifyingKey},
+};
 use futures::stream::FuturesUnordered;
 use futures::StreamExt;
 use network::anemo_ext::NetworkExt;
 use serde::{Deserialize, Serialize};
+use shared_crypto::intent::{Intent, IntentScope};
 use storage::EventStore;
+use sui_types::transaction::{SenderSignedTransaction, TransactionData};
+use sui_types::{
+    base_types::AuthorityName, crypto::AuthoritySignInfo, messages_consensus::ConsensusTransaction,
+    transaction::CertifiedTransaction, transaction::SenderSignedData,
+};
 use tokio::sync::mpsc::UnboundedSender;
 use tokio::{sync::mpsc::UnboundedReceiver, task::JoinHandle};
 use tokio_stream::wrappers::UnboundedReceiverStream;
+use tonic::transport::Channel;
 use tracing::{debug, error, info, warn};
 use types::error::{DagError, DagResult};
-use types::SignInit;
 use types::{
     message_out::{sign_result::SignResultData, KeygenResult, SignResult},
     scalar_event_client::ScalarEventClient,
     scalar_event_server::{ScalarEvent, ScalarEventServer},
     ConditionalBroadcastReceiver, CrossChainTransaction, EventDigest, EventVerify, ExternalMessage,
     MessageIn, PrimaryToPrimaryClient, RequestVerifyRequest, RequestVerifyResponse, Round,
+    TransactionProto, TransactionsClient,
 };
-#[derive(Clone)]
+use types::{MessageOut, SignInit};
+
+#[derive(Clone, Serialize, Deserialize)]
+pub struct ScalarEventTransaction {
+    payload: Vec<u8>,
+    signature: Vec<u8>,
+}
+
 pub struct ScalarEventHandler {
+    pub primary_keypair: KeyPair,
     pub authority_id: AuthorityIdentifier,
     pub committee: Committee,
+    pub worker_cache: WorkerCache,
     /// The current round of the dag.
     pub round: Round,
     pub signature_service: SignatureService<Signature, { crypto::INTENT_MESSAGE_LENGTH }>,
@@ -55,48 +76,12 @@ impl ScalarEventHandler {
                     Some(msg) = rx_external_message.recv() => {
                         //Sign message and send request verification
                         info!("{:?} Receive message from external chain {:?}", &self.authority_id, &msg);
-                        let digest = EventDigest (msg.block.hash.unwrap().0.clone());
-                        let round = self.round.clone();
-                        let committee = self.committee.clone();
-                        let authority = self.authority_id.clone();
-                        let signature_service = self.signature_service.clone();
-                        let event = EventVerify::new(
-                            authority.clone(),
-                            round,
-                            committee.epoch(),
-                            digest.clone(),
-                            signature_service
-                        )
-                        .await;
-                        if let Ok(Some(mut stored_event)) = self.event_store.read(&digest).await {
-                            info!("Stored event {:?}", &stored_event);
-                            if let Some(signature) = event.get_signature(&authority) {
-                                stored_event.add_signature(&authority, signature.clone());
-                                if let Err(e) = self.event_store.write(&stored_event).await {
-                                    error!("Event store error {:?}", e);
-                                }
-                            }
-                        } else {
-                            info!("Write event into node's event_store {:?}", &event);
-                            self.event_store.write(&event);
-                        }
-                        let network = self.network.clone();
-                        Self::propose_event(authority, committee, event, network).await;
+                        self.handle_external_message(msg).await;
 
                     },
                     Some((sign_init, sign_result)) = rx_sign_result.recv() => {
                         info!("{:?} Received SignResult from TssParty {:?} {:?}", &self.authority_id, &sign_init, &sign_result);
-                        if let Some(sign_result_data) = sign_result.sign_result_data {
-                            match sign_result_data {
-                                SignResultData::Signature(sig) => {
-                                    self.submit_event_transaction(&sign_init, sig.clone());
-                                },
-                                SignResultData::Criminals(c) => {
-                                    warn!("Criminals {:?}", c);
-                                },
-                        }
-
-                        }
+                        self.handle_sign_result(sign_init, sign_result).await;
 
                     }
                 }
@@ -107,7 +92,70 @@ impl ScalarEventHandler {
             );
         })
     }
-    fn submit_event_transaction(
+    async fn handle_external_message(&self, msg: ExternalMessage) {
+        let digest = EventDigest(msg.block.hash.unwrap().0.clone());
+        let round = self.round.clone();
+        let committee = self.committee.clone();
+        let authority = self.authority_id.clone();
+        let signature_service = self.signature_service.clone();
+        let event = EventVerify::new(
+            authority.clone(),
+            round,
+            committee.epoch(),
+            digest.clone(),
+            signature_service,
+        )
+        .await;
+        if let Ok(Some(mut stored_event)) = self.event_store.read(&digest).await {
+            info!("Stored event {:?}", &stored_event);
+            if let Some(signature) = event.get_signature(&authority) {
+                stored_event.add_signature(&authority, signature.clone());
+                if let Err(e) = self.event_store.write(&stored_event).await {
+                    error!("Event store error {:?}", e);
+                }
+            }
+        } else {
+            info!("Write event into node's event_store {:?}", &event);
+            self.event_store.write(&event);
+        }
+        let network = self.network.clone();
+        Self::propose_event(authority, committee, event, network).await;
+    }
+    async fn handle_sign_result(&self, sign_init: SignInit, sign_result: SignResult) {
+        if let Some(sign_result_data) = sign_result.sign_result_data {
+            match sign_result_data {
+                SignResultData::Signature(sig) => {
+                    self.submit_event_transaction(&sign_init, sig.clone()).await;
+                }
+                SignResultData::Criminals(c) => {
+                    warn!("Criminals {:?}", c);
+                }
+            }
+        }
+    }
+    // fn create_consensus_transaction(
+    //     &self,
+    //     sender_signed_trans: SenderSignedData,
+    // ) -> ConsensusTransaction {
+    //     let authority = self.committee.authority(&self.authority_id).unwrap();
+    //     let authority_name = AuthorityName::from(authority.protocol_key());
+    //     let mut signatures = Vec::new();
+    //     let sig = AuthoritySignInfo::new(
+    //         self.committee.epoch(),
+    //         transaction.data(),
+    //         Intent::sui_app(IntentScope::SenderSignedTransaction),
+    //         authority_name.clone(),
+    //         &self.primary_keypair,
+    //     );
+    //     signatures.push(sig);
+    //     let certificate =
+    //         CertifiedTransaction::new(sender_signed_trans, signatures, &self.committee).unwrap();
+    //     ConsensusTransaction::new_certificate_message(&authority_name, certificate)
+    // }
+    // ConsensusTransactionBytes:
+    // [83, 237, 223, 22, 186, 64, 7, 113, 1, 2, 0, 0, 0, 0, 0, 0, 0, 229, 0, 0, 0, 0, 0, 0, 0, 232, 0, 0, 0, 0, 0, 0, 0, 32, 89, 117, 113, 29, 177, 5, 78, 141, 191, 83, 17, 55, 65, 18, 85, 161, 237, 96, 114, 98, 120, 185, 169, 163, 91, 111, 28, 22, 222, 71, 85, 120, 1, 32, 210, 85, 147, 19, 197, 239, 139, 176, 181, 165, 42, 243, 17, 168, 60, 88, 210, 159, 156, 50, 55, 131, 160, 121, 187, 127, 4, 178, 96, 125, 127, 212, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 27, 48, 161, 187, 138, 1, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0, 0, 0, 96, 179, 253, 94, 251, 92, 135, 36, 3, 164, 173, 19, 241, 25, 149, 19, 96, 109, 35, 53, 74, 132, 82, 73, 174, 161, 87, 86, 76, 35, 255, 60, 21, 198, 201, 230, 82, 183, 45, 116, 14, 140, 172, 185, 60, 188, 192, 104, 107, 14, 192, 204, 12, 28, 118, 11, 251, 66, 180, 54, 81, 159, 197, 168, 5, 75, 118, 83, 58, 151, 169, 242, 57, 135, 208, 151, 239, 150, 177, 242, 82, 107, 178, 7, 63, 161, 10, 119, 25, 148, 23, 114, 52, 126, 242, 116, 244, 183, 116, 118, 69, 197, 15, 255, 163, 20, 5, 219, 111, 110, 48, 70, 59, 255, 66, 102, 162, 79, 58, 233, 2, 138, 90, 249, 179, 2, 97, 35, 229, 173, 22, 247, 16, 54, 94, 230, 48, 210, 116, 89, 99, 246, 202, 209, 231]
+    // [0, 70, 48, 68, 2, 32, 92, 17, 222, 16, 213, 23, 61, 35, 107, 187, 76, 181, 247, 168, 172, 67, 107, 30, 239, 24, 99, 37, 81, 166, 121, 220, 177, 32, 152, 72, 229, 75, 2, 32, 105, 37, 82, 136, 219, 250, 240, 112, 150, 195, 205, 90, 51, 29, 192, 194, 92, 240, 240, 225, 169, 80, 16, 245, 211, 139, 244, 102, 173, 227, 244, 13]
+    async fn submit_event_transaction(
         &self,
         sign_init: &SignInit,
         signature: Vec<u8>,
@@ -116,26 +164,59 @@ impl ScalarEventHandler {
             "Submit event transaction for {:?} with signature {:?}",
             sign_init, signature
         );
+        let mut trans_client = self.create_remote_client();
+        let transaction = ScalarEventTransaction {
+            payload: vec![],
+            signature: signature.clone(),
+        };
+        let serialized = bcs::to_bytes(&transaction).expect("Serializing transaction cannot fail");
+        // let tran_data = TransactionData::new(kind, sender, gas_payment, gas_budget, gas_price)
+        // let sender_signed_trans = SenderSignedData::new_from_sender_signature(tran_data);
+        // let consensus_trans = self.create_consensus_transaction(sender_signed_trans);
+        // Todo: serialized data here then deserialized into ConsensusTransaction
+        // let serialized =
+        //     bcs::to_bytes(&consensus_trans).expect("Serializing transaction cannot fail");
+        info!("EventTransaction serialized: {:?}", serialized.as_slice());
+        let request = TransactionProto {
+            //transaction: Bytes::from(epoch.to_be_bytes().to_vec()),
+            transaction: Bytes::from(serialized.clone()),
+        };
+        let result = trans_client.submit_transaction(request).await;
+        if result.is_ok() {
+            info!("ScalarEvent::AnemoClient submit_transaction successfully");
+        } else {
+            debug!("ScalarEvent::AnemoClient submit_transaction failed");
+        }
         Ok(())
     }
-    // pub fn sign_message(&self, payload: [u8; 32]) -> MessageHeader {
-    //     MessageHeader {
-    //         epoch: self.committee.epoch(),
-    //         payload,
-    //     }
-    // }
+    fn create_remote_client(&self) -> TransactionsClient<Channel> {
+        let pubkey = self.primary_keypair.public().clone();
+        let target = self
+            .worker_cache
+            .worker(&pubkey, /* id */ &0)
+            .expect("Our key or worker id is not in the worker cache")
+            .transactions;
+        let config = mysten_network::config::Config::new();
+        let channel = config.connect_lazy(&target).unwrap();
+        //Remote client
+        TransactionsClient::new(channel)
+    }
 }
 impl ScalarEventHandler {
     pub fn new(
+        primary_keypair: KeyPair,
         authority_id: AuthorityIdentifier,
         committee: Committee,
+        worker_cache: WorkerCache,
         signature_service: SignatureService<Signature, { crypto::INTENT_MESSAGE_LENGTH }>,
         event_store: EventStore,
         network: Network,
     ) -> Self {
         ScalarEventHandler {
+            primary_keypair,
             authority_id,
             committee,
+            worker_cache,
             round: 0,
             signature_service,
             event_store,
@@ -143,8 +224,10 @@ impl ScalarEventHandler {
         }
     }
     pub fn spawn(
+        primary_keypair: KeyPair,
         authority: Authority,
         committee: Committee,
+        worker_cache: WorkerCache,
         signature_service: SignatureService<Signature, { crypto::INTENT_MESSAGE_LENGTH }>,
         event_store: EventStore,
         network: Network,
@@ -153,8 +236,10 @@ impl ScalarEventHandler {
         rx_shutdown: ConditionalBroadcastReceiver,
     ) -> JoinHandle<()> {
         let mut handler = ScalarEventHandler::new(
+            primary_keypair,
             authority.id(),
             committee,
+            worker_cache,
             signature_service,
             event_store,
             network,

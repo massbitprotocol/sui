@@ -847,6 +847,7 @@ impl SuiNode {
         let new_epoch_start_state = epoch_store.epoch_start_state();
         let committee = new_epoch_start_state.get_narwhal_committee();
 
+        let (tx_scalar_trans, rx_scalar_trans) = tokio::sync::mpsc::unbounded_channel();
         let consensus_handler = Arc::new(ConsensusHandler::new(
             epoch_store.clone(),
             checkpoint_service.clone(),
@@ -856,6 +857,7 @@ impl SuiNode {
             authority_names_to_hostnames,
             committee,
             state.metrics.clone(),
+            tx_scalar_trans,
         ));
 
         let transactions_addr = &config
@@ -876,6 +878,7 @@ impl SuiNode {
                     state.transaction_manager().clone(),
                     sui_tx_validator_metrics.clone(),
                 ),
+                rx_scalar_trans,
             )
             .await;
 

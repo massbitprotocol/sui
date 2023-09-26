@@ -19,21 +19,6 @@ mod execution_driver;
 mod math;
 pub mod metrics;
 pub mod module_cache_metrics;
-pub mod narwhal_manager;
-pub mod quorum_driver;
-pub mod safe_client;
-mod scoring_decision;
-mod stake_aggregator;
-pub mod state_accumulator;
-pub mod storage;
-pub mod streamer;
-#[cfg(any(test, feature = "test-utils"))]
-pub mod test_utils;
-pub mod transaction_input_checker;
-mod transaction_manager;
-pub mod transaction_orchestrator;
-pub mod verify_indexes;
-
 #[cfg(test)]
 #[path = "unit_tests/move_package_publish_tests.rs"]
 mod move_package_publish_tests;
@@ -43,13 +28,28 @@ mod move_package_tests;
 #[cfg(test)]
 #[path = "unit_tests/move_package_upgrade_tests.rs"]
 mod move_package_upgrade_tests;
+pub mod narwhal_manager;
 #[cfg(test)]
 #[path = "unit_tests/pay_sui_tests.rs"]
 mod pay_sui_tests;
+pub mod quorum_driver;
+pub mod safe_client;
+pub mod scalar_transaction_handler;
+mod scoring_decision;
+mod stake_aggregator;
+pub mod state_accumulator;
+pub mod storage;
+pub mod streamer;
 pub mod test_authority_clients;
+#[cfg(any(test, feature = "test-utils"))]
+pub mod test_utils;
+pub mod transaction_input_checker;
+mod transaction_manager;
+pub mod transaction_orchestrator;
 #[cfg(test)]
 #[path = "unit_tests/type_param_tests.rs"]
 mod type_param_tests;
+pub mod verify_indexes;
 
 pub mod signature_verifier;
 

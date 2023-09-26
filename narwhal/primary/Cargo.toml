@@ -54,6 +54,10 @@ mysten-metrics.workspace = true
 anemo.workspace = true
 anemo-tower.workspace = true
 
+#For Scalar
+sui-types.workspace = true
+shared-crypto.workspace = true
+
 [dev-dependencies]
 dashmap.workspace = true
 arc-swap.workspace = true

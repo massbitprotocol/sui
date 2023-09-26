@@ -20,6 +20,7 @@ use narwhal_executor::{ExecutionState, SubscriberResult};
 use narwhal_network::client::NetworkClient;
 use narwhal_node::NodeError;
 use narwhal_types::ExternalMessage;
+use narwhal_types::ScalarEventTransaction;
 use narwhal_types::TransactionProto;
 use narwhal_types::{PreSubscribedBroadcastSender, TransactionsClient};
 use narwhal_worker::LocalNarwhalClient;
@@ -30,7 +31,7 @@ use std::fs;
 use std::sync::Arc;
 use std::time::Instant;
 use sui_protocol_config::ProtocolConfig;
-use tokio::sync::mpsc::UnboundedSender;
+use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 use tokio::sync::Mutex;
 use tokio::sync::RwLock;
 use tokio::task::JoinHandle;
@@ -158,6 +159,7 @@ impl EvmRelayerInner {
         // The state used by the client to execute transactions.
         execution_state: Arc<State>,
         tx_external_message: UnboundedSender<ExternalMessage>,
+        rx_scalar_transaction: Arc<Mutex<UnboundedReceiver<Vec<ScalarEventTransaction>>>>,
     ) -> Result<(), anyhow::Error>
     where
         State: ExecutionState + Send + Sync + 'static,
@@ -185,6 +187,7 @@ impl EvmRelayerInner {
             &registry.as_ref().unwrap(),
             &mut tx_shutdown,
             tx_external_message,
+            rx_scalar_transaction,
         )
         .await?;
         // store the registry
@@ -274,6 +277,7 @@ impl EvmRelayerInner {
         // The channel to send the shutdown signal
         tx_shutdown: &mut PreSubscribedBroadcastSender,
         tx_external_message: UnboundedSender<ExternalMessage>,
+        rx_scalar_transaction: Arc<Mutex<UnboundedReceiver<Vec<ScalarEventTransaction>>>>,
     ) -> Result<Vec<JoinHandle<()>>, anyhow::Error>
     where
         State: ExecutionState + Send + Sync + 'static,
@@ -308,6 +312,26 @@ impl EvmRelayerInner {
             committee,
             worker_cache,
         )));
+        let mut rx_shutdown = tx_shutdown.subscribe();
+        let out_transaction_handle = tokio::spawn(async move {
+            let mut rx_transaction = rx_scalar_transaction.lock().await;
+            //Todo: add router for routing output transaction to destination chain
+            // MVP level: Static evm client
+
+            loop {
+                tokio::select! {
+                    _ = rx_shutdown.receiver.recv() => {
+                        warn!("EVM Relayer Node is shuting down");
+                        break;
+                    },
+                    Some(trans) = rx_transaction.recv() => {
+                        info!("EVM Relayer received transaction {:?}", &trans);
+                        //Call to evm client only
+                    }
+                }
+            }
+        });
+        handles.push(out_transaction_handle);
         //info!("Evm relayer config {}", config_str.as_str());
         let mut ws_handles = relayer_configs
             .scalar_relayer_evm
@@ -329,7 +353,7 @@ impl EvmRelayerInner {
                                 format!("Cannot connect to websocket url {:?}", ws_url.as_str())
                                     .as_str(),
                             );
-
+                            info!("Connected to websocket {:?} successfully", ws_url.as_str());
                             let mut stream =
                                 provider.subscribe_blocks().await.expect("Cannot subscribe");
                             let stream_id = stream.id;
@@ -402,6 +426,8 @@ impl EvmRelayer {
         // The state used by the client to execute transactions.
         execution_state: Arc<State>,
         tx_external_message: Option<UnboundedSender<ExternalMessage>>,
+        // ConsensusOutTransaction channel
+        rx_scalar_transaction: Arc<Mutex<UnboundedReceiver<Vec<ScalarEventTransaction>>>>,
     ) -> Result<(), anyhow::Error>
     where
         State: ExecutionState + Send + Sync + 'static,
@@ -416,6 +442,7 @@ impl EvmRelayer {
                 client,
                 execution_state,
                 tx_external_message.unwrap(),
+                rx_scalar_transaction,
             )
             .await
     }
