@@ -1,3 +1,4 @@
+use crate::ExecutableSample;
 use crate::Relayer;
 use crate::RelayerConfigs;
 use crate::{NAMESPACE, NUM_SHUTDOWN_RECEIVERS};
@@ -346,14 +347,60 @@ impl EvmRelayerInner {
                     // A Ws provider can be created from a ws(s) URI.
                     // In case of wss you must add the "rustls" or "openssl" feature
                     // to the ethers library dependency in `Cargo.toml`
-                    if let (Some(ws_url), Some(start)) = (config.ws_addr, config.start_with_bridge)
-                    {
+                    // Axelar simulation chains do not support websocket connection
+                    // if let (Some(ws_url), Some(start)) = (config.ws_addr, config.start_with_bridge)
+                    // {
+                    //     if start {
+                    //         let provider = Provider::<Ws>::connect(ws_url.as_str()).await.expect(
+                    //             format!("Cannot connect to websocket url {:?}", ws_url.as_str())
+                    //                 .as_str(),
+                    //         );
+                    //         info!("Connected to websocket {:?} successfully", ws_url.as_str());
+                    //         let mut stream =
+                    //             provider.subscribe_blocks().await.expect("Cannot subscribe");
+                    //         let stream_id = stream.id;
+                    //         loop {
+                    //             tokio::select! {
+                    //                 _ = rx_shutdown.receiver.recv() => {
+                    //                     warn!("EVM Relayer Node is shuting down");
+                    //                     break;
+                    //                 },
+                    //                 block = stream.next() => {
+                    //                     //Received event from source chain
+                    //                     //Broadcast a poll
+                    //                     //Send it to the worker for create poll
+                    //                     match block {
+                    //                         Some(block) => {
+                    //                             info!("Received evm block {:?}", &block.hash);
+                    //                             // let hash = block.hash.clone();
+                    //                             let external_message = ExternalMessage::new(block);
+                    //                             tx.send(external_message);
+                    //                             //anemo_client.lock().await.broadcast_block(block).await;
+                    //                         },
+                    //                         None => {
+                    //                             info!("Data from stream is unavailable");
+                    //                         },
+                    //                     }
+                    //                 }
+                    //             }
+                    //         }
+                    //         let _ = provider.unsubscribe(stream_id);
+                    //     }
+                    // }
+                    //https://github.com/gakonst/ethers-rs/blob/master/examples/contracts/examples/abigen.rs
+                    if let (Some(url), Some(contract_addr), Some(start)) = (
+                        config.rpc_addr,
+                        config.contract_addr,
+                        config.start_with_bridge,
+                    ) {
                         if start {
-                            let provider = Provider::<Ws>::connect(ws_url.as_str()).await.expect(
-                                format!("Cannot connect to websocket url {:?}", ws_url.as_str())
-                                    .as_str(),
+                            let provider = Provider::<Http>::try_from(url.as_str()).expect(
+                                format!("Cannot connect to rpc url {:?}", url.as_str()).as_str(),
                             );
-                            info!("Connected to websocket {:?} successfully", ws_url.as_str());
+                            info!("Connected to rpc {:?} successfully", url.as_str());
+                            let client = Arc::new(provider);
+                            let address: Address = contract_addr.parse()?;
+                            let contract = ExecutableSample::new(address, client);
                             let mut stream =
                                 provider.subscribe_blocks().await.expect("Cannot subscribe");
                             let stream_id = stream.id;
@@ -382,7 +429,6 @@ impl EvmRelayerInner {
                                     }
                                 }
                             }
-                            let _ = provider.unsubscribe(stream_id);
                             info!("Stop listen event from external chain");
                         }
                     }

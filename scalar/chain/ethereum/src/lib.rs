@@ -1,3 +1,4 @@
+mod abis;
 mod evm_relayer;
 mod relayer;
 // mod adapter;
@@ -31,6 +32,7 @@ mod relayer;
 // pub use crate::chain::Chain;
 // pub use crate::network::EthereumNetworks;
 // pub use graph::blockchain::BlockIngestor;
+pub use abis::*;
 pub use evm_relayer::*;
 pub use relayer::*;
 pub const NAMESPACE: &str = "scalar";

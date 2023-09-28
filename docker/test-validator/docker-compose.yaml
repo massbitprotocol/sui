@@ -19,7 +19,7 @@ services:
   validator-builder:
     build:
       context: ../..
-      dockerfile: ./docker/sui-test-validator/builder.Dockerfile
+      dockerfile: ./docker/test-validator/builder.Dockerfile
       args:
         # update with git sha of whichever branch you're building on.
         GIT_REVISION: db24658bc9
@@ -27,8 +27,9 @@ services:
 
     environment:
       - LD_PRELOAD
-      - RUST_JSON_LOG="true"
-      - RUST_LOG="info"
+      - RUST_JSON_LOG=true
+      - RUST_LOG=info
+      - SOLC_PATH=/usr/local/bin/solc
       # don't use debug, it generates volumes of data.
     image: sui-validator-builder
     container_name: sui-validator-builder

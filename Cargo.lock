@@ -9577,6 +9577,7 @@ dependencies = [
  "dirs-next",
  "envconfig",
  "ethers",
+ "ethers-solc",
  "eyre",
  "fastcrypto",
  "futures 0.3.25",

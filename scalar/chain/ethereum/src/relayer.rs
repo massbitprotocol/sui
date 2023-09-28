@@ -10,6 +10,7 @@ pub struct RelayerConfigs {
 #[derive(Debug, Deserialize)]
 pub struct RelayerConfig {
     pub name: Option<String>,
+    pub contract_addr: Option<String>,
     pub rpc_addr: Option<String>,
     pub ws_addr: Option<String>,
     pub start_with_bridge: Option<bool>,
