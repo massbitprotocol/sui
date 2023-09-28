@@ -93,7 +93,9 @@ impl ScalarEventHandler {
         })
     }
     async fn handle_external_message(&self, msg: ExternalMessage) {
-        let digest = EventDigest(msg.block.hash.unwrap().0.clone());
+        //Block<H256>.hash
+        //msg.block.hash.unwrap().0.clone()
+        let digest = EventDigest(msg.get_digest());
         let round = self.round.clone();
         let committee = self.committee.clone();
         let authority = self.authority_id.clone();

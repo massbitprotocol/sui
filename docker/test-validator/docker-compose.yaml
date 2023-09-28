@@ -15,6 +15,19 @@ services:
       - 8500:8500
       - 8550:3000
     tty: true    
+    
+  scalar-relayer:
+    build:
+      context: ./
+      dockerfile: Dockerfile.relayer
+    image: scalar-relayer
+    container_name: scalar-relayer
+    restart: always
+    volumes:
+      - ../../../scalar-relayer:/scalar-relayer
+    working_dir: /scalar-relayer
+    command: "sleep infinity"
+    tty: true  
 
   validator-builder:
     build:
@@ -63,13 +76,10 @@ services:
     #command: /opt/sui/entry.sh
     command: sleep infinity
     restart: unless-stopped
-    working_dir: /opt/sui
     # populate your local ./fullnode/config/ directory with fullnode.yaml and genesis.blob for the network you want to use.
     volumes:
-      - ./validator:/opt/sui
+      - ./validator/entry.sh:/entry.sh
       - ./validator/config:/scalar/config
-      # - ./validator/debug/sui-test-validator:/usr/local/bin/sui-test-validator
-      # - ./validator/debug/sui:/usr/local/bin/sui
       - ./validator/nginx.conf:/etc/nginx/sites-available/default
     ports:
       - 9000:8000

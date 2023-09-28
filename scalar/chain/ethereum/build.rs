@@ -17,15 +17,7 @@ fn main() {
     //     .with_max_level(Level::INFO)
     //     .finish();
     tracing::subscriber::set_global_default(subscriber).expect("setting default subscriber failed");
-    compile_project_sols();
-    match abi_generator() {
-        Ok(_) => {
-            println!("Generate abis successfully");
-        }
-        Err(e) => {
-            panic!("Generate abis error {:?}", &e);
-        }
-    }
+    // compile_project_sols();
     // tonic_build::configure()
     //     .protoc_arg("--experimental_allow_proto3_optional")
     //     .out_dir("src/protobuf")

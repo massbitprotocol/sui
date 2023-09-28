@@ -35,11 +35,10 @@ validator() {
         --indexer-rpc-port 9124
 }
 
-relayers() {
-    /usr/local/bin/scalar-relayer --config  "${CONFIG_DIR}" \
+relayer() {
+    /usr/local/bin/scalar-relayer --configdir  "${CONFIG_DIR}" \
         -h "http://127.0.0.1" \
-        -p ${GRPC_PORT} \
-        -n 4 
+        -p ${GRPC_PORT} 
 }
 
 $@

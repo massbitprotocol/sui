@@ -1,20 +1,32 @@
 use crate::Round;
 use config::{AuthorityIdentifier, Epoch};
 use crypto::{to_intent_message, Signature};
-use ethers::types::{Block, H256};
+use ethers::{
+    types::{Block, H256},
+    utils::keccak256,
+};
 use fastcrypto::{hash::Digest, signature_service::SignatureService};
 use serde::{Deserialize, Serialize};
-use std::{collections::HashMap, fmt};
+use std::{
+    collections::{hash_map::DefaultHasher, HashMap},
+    fmt,
+    hash::Hasher,
+};
 
+//For simplicity all message convert to string using serde_json
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ExternalMessage {
-    pub block: Block<H256>,
+    pub message: Vec<u8>,
 }
 
 impl ExternalMessage {
-    pub fn new(block: Block<H256>) -> Self {
+    pub fn new(message: Vec<u8>) -> Self {
         //let _hash = block.hash.unwrap().0.clone();
-        Self { block }
+        Self { message }
+    }
+    pub fn get_digest(&self) -> [u8; crypto::DIGEST_LENGTH] {
+        let hash = keccak256(self.message.as_slice());
+        hash
     }
 }
 

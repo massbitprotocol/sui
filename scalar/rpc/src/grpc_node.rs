@@ -19,7 +19,7 @@ use narwhal_crypto::{KeyPair, NetworkKeyPair, PublicKey};
 use narwhal_executor::{ExecutionState, SubscriberResult};
 use narwhal_network::client::NetworkClient;
 use narwhal_node::NodeError;
-use narwhal_types::TransactionProto;
+use narwhal_types::{ExternalMessage, ScalarEventTransaction, TransactionProto};
 use narwhal_types::{PreSubscribedBroadcastSender, TransactionsClient};
 use narwhal_worker::LocalNarwhalClient;
 use prometheus::Registry;
@@ -28,7 +28,8 @@ use std::sync::Arc;
 use std::time::Instant;
 use std::{error::Error, io::ErrorKind, net::ToSocketAddrs, pin::Pin, time::Duration};
 use sui_protocol_config::ProtocolConfig;
-use tokio::sync::{mpsc, watch, RwLock};
+use tokio::sync::mpsc::UnboundedReceiver;
+use tokio::sync::{mpsc, watch, Mutex, RwLock};
 use tokio::task::JoinHandle;
 use tokio_stream::wrappers::UnboundedReceiverStream;
 use tokio_stream::{wrappers::ReceiverStream, Stream, StreamExt};
@@ -67,6 +68,8 @@ impl GrpcNodeInner {
         client: NetworkClient,
         // The state used by the client to execute transactions.
         execution_state: Arc<State>,
+        tx_external_message: mpsc::UnboundedSender<ExternalMessage>,
+        rx_scalar_transaction: Arc<Mutex<UnboundedReceiver<Vec<ScalarEventTransaction>>>>,
     ) -> Result<(), NodeError>
     where
         State: ExecutionState + Send + Sync + 'static,
@@ -93,6 +96,8 @@ impl GrpcNodeInner {
             self.internal_flag,
             execution_state.clone(),
             &registry.as_ref().unwrap(),
+            tx_external_message,
+            rx_scalar_transaction,
             &mut tx_shutdown,
         )
         .await?;
@@ -245,6 +250,8 @@ impl GrpcNodeInner {
         execution_state: Arc<State>,
         // A prometheus exporter Registry to use for the metrics
         registry: &Registry,
+        tx_external_message: mpsc::UnboundedSender<ExternalMessage>,
+        rx_scalar_transaction: Arc<Mutex<UnboundedReceiver<Vec<ScalarEventTransaction>>>>,
         // The channel to send the shutdown signal
         tx_shutdown: &mut PreSubscribedBroadcastSender,
     ) -> SubscriberResult<Vec<JoinHandle<()>>>
@@ -277,6 +284,8 @@ impl GrpcNodeInner {
         info!("GRPC address {}", &grpc_addr);
         let narwhal_client = Arc::new(AnemoClient::new(committee, worker_cache, name));
         let abci_service = GrpcService {
+            tx_external_message,
+            rx_scalar_transaction,
             tx_transaction,
             narwhal_client: narwhal_client.clone(),
         };
@@ -294,13 +303,14 @@ impl GrpcNodeInner {
                 .unwrap();
         });
         handles.push(handle);
-        let anemo_handle = tokio::spawn(async move {
-            let client = narwhal_client;
-            while let Some(abci_request) = rx_transaction.recv().await {
-                client.send_transaction(abci_request).await;
-            }
-        });
-        handles.push(anemo_handle);
+        //Message received from relayer must be verified bofore to send to Narwhal
+        // let anemo_handle = tokio::spawn(async move {
+        //     let client = narwhal_client;
+        //     while let Some(abci_request) = rx_transaction.recv().await {
+        //         client.send_transaction(abci_request).await;
+        //     }
+        // });
+        // handles.push(anemo_handle);
         Ok(handles)
     }
     pub async fn spawn_tss<State>(
@@ -366,6 +376,8 @@ impl GrpcNodeInner {
 
 #[derive(Debug)]
 pub struct GrpcService {
+    tx_external_message: mpsc::UnboundedSender<ExternalMessage>,
+    rx_scalar_transaction: Arc<Mutex<UnboundedReceiver<Vec<ScalarEventTransaction>>>>,
     tx_transaction: mpsc::Sender<ScalarAbciRequest>,
     narwhal_client: Arc<AnemoClient>,
 }
@@ -441,22 +453,41 @@ impl ScalarAbci for GrpcService {
         // will be drooped when connection error occurs and error will never be propagated
         // to mapped version of `in_stream`.
         let tx_transaction = self.tx_transaction.clone();
-
-        tokio::spawn(async move {
+        let tx_external_message = self.tx_external_message.clone();
+        let mut handles = Vec::new();
+        let rx_trans = self.rx_scalar_transaction.clone();
+        let tx_abci_trans = tx_abci.clone();
+        let handle = tokio::spawn(async move {
+            while let Some(trans) = rx_trans.lock().await.recv().await {
+                info!("Consensus made transactions {:?}", &trans);
+                for event_trans in trans.into_iter() {
+                    let json = serde_json::to_string(&event_trans).unwrap();
+                    let abci_response = ScalarAbciResponse {
+                        namespace: NAMESPACE.to_string(),
+                        message: json.into_bytes(),
+                    };
+                    let _ = tx_abci_trans.send(Ok(abci_response)).await;
+                }
+            }
+        });
+        handles.push(handle);
+        let handle = tokio::spawn(async move {
             while let Some(result) = in_stream.next().await {
                 match result {
                     Ok(v) => {
                         let message = v.message.clone();
                         info!(
-                            "ScalarAbciServer::receiver message {}, then send to narwhal via anemo client",
-                            String::from_utf8(message.clone()).unwrap()
+                            "ScalarAbciServer::receiver message {:?}, then send to narwhal via tx_external_message",
+                            &message
                         );
+                        let external_message = ExternalMessage::new(message.clone());
+                        let _ = tx_external_message.send(external_message);
                         let _ = tx_transaction.send(v.clone()).await;
                         //client.send_transaction(v).await;
                         let send_response = tx_abci
                             .send(Ok(ScalarAbciResponse {
                                 namespace: NAMESPACE.to_string(),
-                                message,
+                                message: "Ark".to_string().into_bytes(),
                             }))
                             .await;
                         if let Err(_err) = send_response {
@@ -482,6 +513,7 @@ impl ScalarAbci for GrpcService {
             }
             println!("\tstream ended");
         });
+        handles.push(handle);
         // scalarAbci just write the same data that was received
         let out_stream = ReceiverStream::new(rx_abci);
 
@@ -585,6 +617,8 @@ impl GrpcNode {
         client: NetworkClient,
         // The state used by the client to execute transactions.
         execution_state: Arc<State>,
+        tx_external_message: mpsc::UnboundedSender<ExternalMessage>,
+        rx_scalar_transaction: Arc<Mutex<UnboundedReceiver<Vec<ScalarEventTransaction>>>>,
     ) -> Result<(), NodeError>
     where
         State: ExecutionState + Send + Sync + 'static,
@@ -599,6 +633,8 @@ impl GrpcNode {
                 worker_cache,
                 client,
                 execution_state,
+                tx_external_message,
+                rx_scalar_transaction,
             )
             .await
     }

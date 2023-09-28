@@ -219,38 +219,39 @@ impl NarwhalManager {
                 }
             }
         }
-        //Start Evm Relayer
-        const MAX_RELAYER_RETRIES: u32 = 2;
-        let mut relayer_retries = 0;
-        loop {
-            //Todo: Update to new Epoch
-            match self
-                .evm_relayer
-                .start(
-                    self.primary_keypair.copy(),
-                    self.network_keypair.copy(),
-                    committee.clone(),
-                    worker_cache.clone(),
-                    network_client.clone(),
-                    execution_state.clone(),
-                    tx_external_message.clone(),
-                    rx_scalar_transaction.clone(),
-                )
-                .await
-            {
-                Ok(_) => {
-                    break;
-                }
-                Err(e) => {
-                    relayer_retries += 1;
-                    if relayer_retries >= MAX_RELAYER_RETRIES {
-                        panic!("Unable to start Relayer Process: {:?}", e);
-                    }
-                    tracing::error!("Unable to start Relayer Process: {:?}, retrying", e);
-                    tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
-                }
-            }
-        }
+        // Start Evm Relayer
+        // Use seperated relayer process
+        // const MAX_RELAYER_RETRIES: u32 = 2;
+        // let mut relayer_retries = 0;
+        // loop {
+        //     //Todo: Update to new Epoch
+        //     match self
+        //         .evm_relayer
+        //         .start(
+        //             self.primary_keypair.copy(),
+        //             self.network_keypair.copy(),
+        //             committee.clone(),
+        //             worker_cache.clone(),
+        //             network_client.clone(),
+        //             execution_state.clone(),
+        //             tx_external_message.clone(),
+        //             rx_scalar_transaction.clone(),
+        //         )
+        //         .await
+        //     {
+        //         Ok(_) => {
+        //             break;
+        //         }
+        //         Err(e) => {
+        //             relayer_retries += 1;
+        //             if relayer_retries >= MAX_RELAYER_RETRIES {
+        //                 panic!("Unable to start Relayer Process: {:?}", e);
+        //             }
+        //             tracing::error!("Unable to start Relayer Process: {:?}, retrying", e);
+        //             tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
+        //         }
+        //     }
+        // }
 
         // Start Tss node
         // Todo: Currentlys Start Tss client with grpc node, connect to centralized tss server via rpc
@@ -299,6 +300,8 @@ impl NarwhalManager {
                     worker_cache.clone(),
                     network_client.clone(),
                     execution_state.clone(),
+                    tx_external_message.as_ref().unwrap().clone(),
+                    rx_scalar_transaction.clone(),
                 )
                 .await
             {

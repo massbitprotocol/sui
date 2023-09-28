@@ -35,7 +35,6 @@ tracing.workspace = true
 tap.workspace = true
 uuid.workspace = true
 k256 = { version = "0.13" }
-
 consensus = { path = "../consensus", package = "narwhal-consensus" }
 fastcrypto.workspace = true
 crypto = { path = "../crypto", package = "narwhal-crypto" }

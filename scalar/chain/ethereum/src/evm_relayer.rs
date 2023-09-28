@@ -1,4 +1,3 @@
-use crate::ExecutableSample;
 use crate::Relayer;
 use crate::RelayerConfigs;
 use crate::{NAMESPACE, NUM_SHUTDOWN_RECEIVERS};
@@ -6,39 +5,30 @@ use anemo::PeerId;
 use anyhow::anyhow;
 use arc_swap::Guard;
 use ethers::prelude::*;
-use eyre;
-use fastcrypto::bls12381::min_sig::BLS12381PublicKey;
 use fastcrypto::traits::KeyPair as _;
 use futures::future::try_join_all;
 use futures::stream::FuturesUnordered;
-use futures::Stream;
-use k256::schnorr::signature::KeypairRef;
 use mysten_metrics::{RegistryID, RegistryService};
-use narwhal_config::committee;
 use narwhal_config::{Committee, Parameters, WorkerCache};
-use narwhal_crypto::{KeyPair, NetworkKeyPair, PublicKey};
-use narwhal_executor::{ExecutionState, SubscriberResult};
+use narwhal_crypto::{KeyPair, NetworkKeyPair};
+use narwhal_executor::ExecutionState;
 use narwhal_network::client::NetworkClient;
-use narwhal_node::NodeError;
 use narwhal_types::ExternalMessage;
 use narwhal_types::ScalarEventTransaction;
 use narwhal_types::TransactionProto;
 use narwhal_types::{PreSubscribedBroadcastSender, TransactionsClient};
 use narwhal_worker::LocalNarwhalClient;
 use prometheus::Registry;
-use serde::Deserialize;
 use std::error::Error;
 use std::fs;
 use std::sync::Arc;
 use std::time::Instant;
-use sui_protocol_config::ProtocolConfig;
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 use tokio::sync::Mutex;
 use tokio::sync::RwLock;
 use tokio::task::JoinHandle;
 use tonic::transport::Channel;
 use tonic::Status;
-use tracing::field::AsField;
 use tracing::{debug, info, instrument, warn};
 //use web3;
 //const WSS_URL: &str = "wss://eth-mainnet.g.alchemy.com/v2/9u1mZJtSKl2NgzRA9i0rh5_QIPQi4pTU";
@@ -336,101 +326,55 @@ impl EvmRelayerInner {
         //info!("Evm relayer config {}", config_str.as_str());
         let mut ws_handles = relayer_configs
             .scalar_relayer_evm
-            .into_iter()
-            .map(|config| {
+            .iter()
+            .filter(|item| item.start_with_bridge.unwrap_or(false))
+            .map(|relayer_config| {
                 let mut rx_shutdown = tx_shutdown.subscribe();
                 // Anemo client
                 //let anemo_client = narwhal_client.clone();
                 let anemo_client = client.clone();
                 let tx = tx_external_message.clone();
+                let relayer_config = relayer_config.clone();
                 tokio::spawn(async move {
                     // A Ws provider can be created from a ws(s) URI.
                     // In case of wss you must add the "rustls" or "openssl" feature
                     // to the ethers library dependency in `Cargo.toml`
                     // Axelar simulation chains do not support websocket connection
-                    // if let (Some(ws_url), Some(start)) = (config.ws_addr, config.start_with_bridge)
-                    // {
-                    //     if start {
-                    //         let provider = Provider::<Ws>::connect(ws_url.as_str()).await.expect(
-                    //             format!("Cannot connect to websocket url {:?}", ws_url.as_str())
-                    //                 .as_str(),
-                    //         );
-                    //         info!("Connected to websocket {:?} successfully", ws_url.as_str());
-                    //         let mut stream =
-                    //             provider.subscribe_blocks().await.expect("Cannot subscribe");
-                    //         let stream_id = stream.id;
-                    //         loop {
-                    //             tokio::select! {
-                    //                 _ = rx_shutdown.receiver.recv() => {
-                    //                     warn!("EVM Relayer Node is shuting down");
-                    //                     break;
-                    //                 },
-                    //                 block = stream.next() => {
-                    //                     //Received event from source chain
-                    //                     //Broadcast a poll
-                    //                     //Send it to the worker for create poll
-                    //                     match block {
-                    //                         Some(block) => {
-                    //                             info!("Received evm block {:?}", &block.hash);
-                    //                             // let hash = block.hash.clone();
-                    //                             let external_message = ExternalMessage::new(block);
-                    //                             tx.send(external_message);
-                    //                             //anemo_client.lock().await.broadcast_block(block).await;
-                    //                         },
-                    //                         None => {
-                    //                             info!("Data from stream is unavailable");
-                    //                         },
-                    //                     }
-                    //                 }
-                    //             }
-                    //         }
-                    //         let _ = provider.unsubscribe(stream_id);
-                    //     }
-                    // }
-                    //https://github.com/gakonst/ethers-rs/blob/master/examples/contracts/examples/abigen.rs
-                    if let (Some(url), Some(contract_addr), Some(start)) = (
-                        config.rpc_addr,
-                        config.contract_addr,
-                        config.start_with_bridge,
-                    ) {
-                        if start {
-                            let provider = Provider::<Http>::try_from(url.as_str()).expect(
-                                format!("Cannot connect to rpc url {:?}", url.as_str()).as_str(),
-                            );
-                            info!("Connected to rpc {:?} successfully", url.as_str());
-                            let client = Arc::new(provider);
-                            let address: Address = contract_addr.parse()?;
-                            let contract = ExecutableSample::new(address, client);
-                            let mut stream =
-                                provider.subscribe_blocks().await.expect("Cannot subscribe");
-                            let stream_id = stream.id;
-                            loop {
-                                tokio::select! {
-                                    _ = rx_shutdown.receiver.recv() => {
-                                        warn!("EVM Relayer Node is shuting down");
-                                        break;
-                                    },
-                                    block = stream.next() => {
-                                        //Received event from source chain
-                                        //Broadcast a poll
-                                        //Send it to the worker for create poll
-                                        match block {
-                                            Some(block) => {
-                                                info!("Received evm block {:?}", &block.hash);
-                                                // let hash = block.hash.clone();
-                                                let external_message = ExternalMessage::new(block);
-                                                tx.send(external_message);
-                                                //anemo_client.lock().await.broadcast_block(block).await;
-                                            },
-                                            None => {
-                                                info!("Data from stream is unavailable");
-                                            },
-                                        }
+                    if let Some(ws_url) = relayer_config.ws_addr {
+                        let provider = Provider::<Ws>::connect(ws_url.as_str()).await.expect(
+                            format!("Cannot connect to websocket url {:?}", ws_url.as_str())
+                                .as_str(),
+                        );
+                        info!("Connected to websocket {:?} successfully", ws_url.as_str());
+                        let mut stream =
+                            provider.subscribe_blocks().await.expect("Cannot subscribe");
+                        let stream_id = stream.id;
+                        loop {
+                            tokio::select! {
+                                _ = rx_shutdown.receiver.recv() => {
+                                    warn!("EVM Relayer Node is shuting down");
+                                    break;
+                                },
+                                block = stream.next() => {
+                                    //Received event from source chain
+                                    //Broadcast a poll
+                                    //Send it to the worker for create poll
+                                    match block {
+                                        Some(block) => {
+                                            info!("Received evm block {:?}", &block.hash);
+                                            let hash = block.hash.clone();
+                                            let external_message = ExternalMessage::new(hash.clone().unwrap().0.into());
+                                            let _ = tx.send(external_message);
+                                            //anemo_client.lock().await.broadcast_block(block).await;
+                                        },
+                                        None => {
+                                            info!("Data from stream is unavailable");
+                                        },
                                     }
                                 }
                             }
-                            info!("Stop listen event from external chain");
                         }
+                        let _ = provider.unsubscribe(stream_id);
                     }
                 })
             });

@@ -1,14 +1,21 @@
-[[scalar_relayer_evm]]
+[[relayer_evm]]
 name = "Ethereum"
-#rpc_addr = "https://mainnet.infura.io/ws/v3/c60b0bb42f8a4c6481ecd229eddaca27"
-#ws_addr = "wss://mainnet.infura.io/ws/v3/c60b0bb42f8a4c6481ecd229eddaca27"
-rpc_addr = "http://axelar-local:8500/3"
-ws_addr = "ws://axelar-local:8500/3"
+call_contract = "0xe432150cce91c13a887f7D836923d5597adD8E31"
+rpc_addr = "https://mainnet.infura.io/ws/v3/c60b0bb42f8a4c6481ecd229eddaca27"
+ws_addr = "wss://mainnet.infura.io/ws/v3/c60b0bb42f8a4c6481ecd229eddaca27"
+start_with_bridge = false
+
+[[relayer_evm]]
+name = "Goerli"
+call_contract = "0xe432150cce91c13a887f7D836923d5597adD8E31"
+rpc_addr = "https://eth-goerli.g.alchemy.com/v2/DpCscOiv_evEPscGYARI3cOVeJ59CRo8"
+ws_addr = "wss://eth-goerli.g.alchemy.com/v2/DpCscOiv_evEPscGYARI3cOVeJ59CRo8"
 start_with_bridge = true
 
-[[scalar_relayer_evm]]
+[[relayer_evm]]
 name = "Avalanche"
-rpc_addr = "http://axelar-local:8500/1"
-ws_addr = "ws://axelar-local:8500/1"
+call_contract = "0xC249632c2D40b9001FE907806902f63038B737Ab"
+#rpc_addr = "http://local_chains:8500/1"
+#ws_addr = "ws://local_chains:8500/1"
 #ws_addr = "wss://mainnet.infura.io/ws/v3/c60b0bb42f8a4c6481ecd229eddaca27"
-start_with_bridge = false
+start_with_bridge = true

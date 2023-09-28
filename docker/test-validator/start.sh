@@ -21,7 +21,7 @@ containers() {
   COMMAND=${1:-up}
   if [ "$COMMAND" == "up" ]
   then
-    docker-compose -f ${COMPOSE_FILE} up --force-recreate -d
+    docker-compose -f ${COMPOSE_FILE} up -d #--force-recreate
   else
     docker-compose -f ${COMPOSE_FILE} down
   fi  
