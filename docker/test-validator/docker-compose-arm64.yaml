@@ -1,0 +1,89 @@
+version: "3.9"
+
+services:
+  # axelar-local:
+  #   build:
+  #     context: ./
+  #     dockerfile: Dockerfile.chains
+  #   container_name: axelar-local
+  #   restart: always
+  #   volumes:
+  #     - ../../../axelar:/axelar:rw
+  #   working_dir: /axelar
+  #   command: "sleep infinity"
+  #   ports:
+  #     - 8500:8500
+  #     - 8550:3000
+  #   tty: true
+
+  validator-builder:
+    build:
+      context: ../..
+      dockerfile: ./docker/test-validator/builder.Dockerfile.arm64
+      args:
+        # update with git sha of whichever branch you're building on.
+        GIT_REVISION: db24658bc9
+        BUILD_DATE: today
+
+    environment:
+      - LD_PRELOAD
+      - RUST_JSON_LOG=true
+      - RUST_LOG=info
+      - SOLC_PATH=/usr/local/bin/solc
+      # don't use debug, it generates volumes of data.
+    image: sui-validator-builder
+    container_name: sui-validator-builder
+    command: sleep infinity
+    restart: unless-stopped
+    working_dir: /sui
+    # populate your local ./fullnode/config/ directory with fullnode.yaml and genesis.blob for the network you want to use.
+    volumes:
+      - ../..:/sui
+      - ../../../tofnd:/tofnd
+      - ../../../tofn:/tofn
+      - ./validator/build.sh:/build.sh
+      - ./validator/debug:/sui/target/debug:rw
+      - ./validator/release:/sui/target/release:rw
+
+  validator-runner:
+    build:
+      context: ../..
+      dockerfile: ./docker/sui-test-validator/runner.Dockerfile
+      args:
+        # update with git sha of whichever branch you're building on.
+        GIT_REVISION: db24658bc9
+        BUILD_DATE: today
+    environment:
+      - LD_PRELOAD
+      - RUST_JSON_LOG="true"
+      - RUST_LOG="info"
+      # don't use debug, it generates volumes of data.
+    image: sui-validator-runner
+    container_name: sui-validator-runner
+    #command: /opt/sui/entry.sh
+    command: sleep infinity
+    restart: unless-stopped
+    working_dir: /opt/sui
+    # populate your local ./fullnode/config/ directory with fullnode.yaml and genesis.blob for the network you want to use.
+    volumes:
+      - ./validator:/opt/sui
+      - ./validator/config:/scalar/config
+      # - ./validator/debug/sui-test-validator:/usr/local/bin/sui-test-validator
+      # - ./validator/debug/sui:/usr/local/bin/sui
+      - ./validator/nginx.conf:/etc/nginx/sites-available/default
+    ports:
+      - 9000:8000
+      - 9184:8184
+      - 9123:8123
+      - 9124:8124
+      - 50011:50011
+      - 50012:50012
+      - 50013:50013
+      - 50014:50014
+      - 50050:50050
+      - 50051:50051
+      - 50052:50052
+      - 50053:50053
+      - target: 8084
+        published: 8084
+        protocol: udp

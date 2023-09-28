@@ -1,13 +1,30 @@
-#!/bin/sh
+#!/bin/bash
 DIR="$( cd "$( dirname "$0" )" && pwd )"
+OS=$(uname)
 BUILDER=sui-validator-builder
 RUNNER=sui-validator-runner
+COMPOSE_FILE=${DIR}/docker-compose.yaml
+if [ "$OS" == "Darwin" ]
+then
+    ARCH=$(uname -m)
+    if [ "$ARCH" == "arm64" ]
+    then
+        COMPOSE_FILE=${DIR}/docker-compose-arm64.yaml
+    fi
+fi 
+
 init() {
-  docker-compose -f ${DIR}/docker-compose.yaml build
+  docker-compose -f ${COMPOSE_FILE} build
 }
 
 containers() {
-  docker-compose -f ${DIR}/docker-compose.yaml up --force-recreate -d
+  COMMAND=${1:-up}
+  if [ "$COMMAND" == "up" ]
+  then
+    docker-compose -f ${COMPOSE_FILE} up --force-recreate -d
+  else
+    docker-compose -f ${COMPOSE_FILE} down
+  fi  
 }
 
 build() {

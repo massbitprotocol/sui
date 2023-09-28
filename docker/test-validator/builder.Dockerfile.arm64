@@ -1,4 +1,4 @@
-FROM rust:1.70.0 
+FROM arm64v8/rust:1.70 
 ARG PROFILE=release
 WORKDIR sui
 RUN apt-get update && apt-get install -y cmake clang libpq-dev git libssl-dev software-properties-common
