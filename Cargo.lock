@@ -4161,8 +4161,10 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8fc3cb4d91f53b50155bdcfd23f6a4c39ae1969c2ae85982b135750cccaf5fce"
 dependencies = [
  "cfg-if 1.0.0",
+ "js-sys",
  "libc",
  "wasi 0.9.0+wasi-snapshot-preview1",
+ "wasm-bindgen",
 ]
 
 [[package]]
@@ -4570,6 +4572,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "791a029f6b9fc27657f6f188ec6e5e43f6911f6f878e0dc5501396e09809d437"
 dependencies = [
  "hmac 0.12.1",
+]
+
+[[package]]
+name = "hmac"
+version = "0.8.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "126888268dcc288495a26bf004b38c5fdbb31682f992c84ceb046a1f0fe38840"
+dependencies = [
+ "crypto-mac 0.8.0",
+ "digest 0.9.0",
 ]
 
 [[package]]
@@ -5463,6 +5475,19 @@ name = "libm"
 version = "0.2.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "348108ab3fba42ec82ff6e9564fc4ca0247bdccdc68dd8af9764bbc79c3c8ffb"
+
+[[package]]
+name = "libpaillier"
+version = "0.2.1"
+source = "git+https://github.com/axelarnetwork/paillier-rs#2d965b16d89de6f5d15b054fd5874d0c017c4747"
+dependencies = [
+ "digest 0.9.0",
+ "rand 0.8.5",
+ "serde 1.0.152",
+ "serde_bare",
+ "unknown_order",
+ "zeroize",
+]
 
 [[package]]
 name = "librocksdb-sys"
@@ -6971,6 +6996,7 @@ name = "narwhal-primary"
 version = "0.1.0"
 dependencies = [
  "anemo",
+ "anemo-build",
  "anemo-tower",
  "anyhow",
  "arc-swap",
@@ -6983,6 +7009,7 @@ dependencies = [
  "dashmap",
  "fastcrypto",
  "futures 0.3.25",
+ "futures-util",
  "governor",
  "hex",
  "indexmap 1.9.3",
@@ -7007,10 +7034,14 @@ dependencies = [
  "prometheus",
  "proptest",
  "prost",
+ "prost-build",
  "rand 0.8.5",
  "reqwest",
+ "rpassword",
+ "rustversion",
  "serde 1.0.152",
  "shared-crypto",
+ "sled",
  "sui-macros",
  "sui-protocol-config",
  "sui-types",
@@ -7018,14 +7049,18 @@ dependencies = [
  "telemetry-subscribers",
  "tempfile",
  "thiserror",
+ "tiny-bip39 0.8.2",
+ "tofn",
  "tokio",
  "tokio-stream",
  "tonic 0.9.2",
+ "tonic-build 0.9.2",
  "tower",
  "tracing",
  "typed-store",
  "uuid 1.4.1",
  "workspace-hack",
+ "zeroize",
 ]
 
 [[package]]
@@ -7127,6 +7162,7 @@ dependencies = [
  "serde_with",
  "sui-protocol-config",
  "thiserror",
+ "tofn",
  "tokio",
  "tonic 0.9.2",
  "tonic-build 0.9.2",
@@ -7943,6 +7979,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8835116a5c179084a830efb3adc117ab007512b535bc1a21c991d3b32a6b44dd"
 dependencies = [
  "camino",
+]
+
+[[package]]
+name = "pbkdf2"
+version = "0.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "216eaa586a190f0a738f2f918511eecfa90f13295abec0e457cdebcceda80cbd"
+dependencies = [
+ "crypto-mac 0.8.0",
 ]
 
 [[package]]
@@ -9224,6 +9269,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "rpassword"
+version = "5.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ffc936cf8a7ea60c58f030fd36a612a48f440610214dc54bc36431f9ea0c3efb"
+dependencies = [
+ "libc",
+ "winapi",
+]
+
+[[package]]
 name = "rsa"
 version = "0.8.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -9351,6 +9406,16 @@ dependencies = [
  "serde 1.0.152",
  "sha2 0.9.9",
  "tokio",
+]
+
+[[package]]
+name = "rust-gmp"
+version = "0.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c3ddf28998d5730b96a9fe188557953de503d77ff403ae175ad1417921e5d906"
+dependencies = [
+ "libc",
+ "num-traits 0.1.43",
 ]
 
 [[package]]
@@ -9998,6 +10063,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "serde_bare"
+version = "0.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "adbd09b1e0b45fadbc163e4ea1f4224b451146ba4f01963c69975780c33215fa"
+dependencies = [
+ "serde 1.0.152",
+]
+
+[[package]]
 name = "serde_bytes"
 version = "0.11.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -10199,6 +10273,7 @@ dependencies = [
  "cpufeatures",
  "digest 0.9.0",
  "opaque-debug",
+ "sha2-asm",
 ]
 
 [[package]]
@@ -10210,6 +10285,15 @@ dependencies = [
  "cfg-if 1.0.0",
  "cpufeatures",
  "digest 0.10.6",
+]
+
+[[package]]
+name = "sha2-asm"
+version = "0.6.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f27ba7066011e3fb30d808b51affff34f0a66d3a03a58edd787c6e420e40e44e"
+dependencies = [
+ "cc",
 ]
 
 [[package]]
@@ -10367,6 +10451,22 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4614a76b2a8be0058caa9dbbaf66d988527d86d003c11a94fbd335d7661edcef"
 dependencies = [
  "autocfg",
+]
+
+[[package]]
+name = "sled"
+version = "0.34.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7f96b4737c2ce5987354855aed3797279def4ebf734436c6aa4552cf8e169935"
+dependencies = [
+ "crc32fast",
+ "crossbeam-epoch",
+ "crossbeam-utils",
+ "fs2",
+ "fxhash",
+ "libc",
+ "log",
+ "parking_lot 0.11.2",
 ]
 
 [[package]]
@@ -11526,7 +11626,7 @@ dependencies = [
  "slip10_ed25519",
  "sui-types",
  "tempfile",
- "tiny-bip39",
+ "tiny-bip39 1.0.0",
  "workspace-hack",
 ]
 
@@ -13034,6 +13134,25 @@ dependencies = [
 
 [[package]]
 name = "tiny-bip39"
+version = "0.8.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ffc59cb9dfc85bb312c3a78fd6aa8a8582e310b0fa885d5bb877f6dcc601839d"
+dependencies = [
+ "anyhow",
+ "hmac 0.8.1",
+ "once_cell",
+ "pbkdf2 0.4.0",
+ "rand 0.7.3",
+ "rustc-hash",
+ "sha2 0.9.9",
+ "thiserror",
+ "unicode-normalization",
+ "wasm-bindgen",
+ "zeroize",
+]
+
+[[package]]
+name = "tiny-bip39"
 version = "1.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "62cc94d358b5a1e84a5cb9109f559aa3c4d634d2b1b4de3d0fa4adc7c78e2861"
@@ -13093,6 +13212,24 @@ name = "tinyvec_macros"
 version = "0.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cda74da7e1a664f795bb1f8a87ec406fb89a02522cf6e50620d016add6dbbf5c"
+
+[[package]]
+name = "tofn"
+version = "0.1.0"
+dependencies = [
+ "bincode",
+ "ecdsa 0.14.8",
+ "hmac 0.11.0",
+ "k256 0.13.1",
+ "libpaillier",
+ "rand 0.8.5",
+ "rand_chacha 0.3.1",
+ "serde 1.0.152",
+ "sha2 0.9.9",
+ "sha3 0.9.1",
+ "tracing",
+ "zeroize",
+]
 
 [[package]]
 name = "tokio"
@@ -13999,6 +14136,19 @@ checksum = "7d3160b73c9a19f7e2939a2fdad446c57c1bbbbf4d919d3213ff1267a580d8b5"
 dependencies = [
  "crypto-common",
  "subtle",
+]
+
+[[package]]
+name = "unknown_order"
+version = "0.2.3"
+source = "git+https://github.com/axelarnetwork/unknown_order#0f841f810f8bfe440d7768501da186b2426b7afa"
+dependencies = [
+ "digest 0.9.0",
+ "hex",
+ "rand 0.8.5",
+ "rust-gmp",
+ "serde 1.0.152",
+ "zeroize",
 ]
 
 [[package]]
@@ -15397,7 +15547,7 @@ dependencies = [
  "time-core",
  "time-macros",
  "tint",
- "tiny-bip39",
+ "tiny-bip39 1.0.0",
  "tinytemplate",
  "tinyvec",
  "tinyvec_macros",

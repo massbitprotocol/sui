@@ -34,7 +34,6 @@ tower.workspace = true
 tracing.workspace = true
 tap.workspace = true
 uuid.workspace = true
-k256 = { version = "0.13" }
 consensus = { path = "../consensus", package = "narwhal-consensus" }
 fastcrypto.workspace = true
 crypto = { path = "../crypto", package = "narwhal-crypto" }
@@ -56,6 +55,14 @@ anemo-tower.workspace = true
 #For Scalar
 sui-types.workspace = true
 shared-crypto.workspace = true
+k256 = { version = "0.13" }
+#For tofnd
+tofn = { path = "../../../tofn" }
+futures-util = {version = "0.3", default-features = false}
+sled = {version = "0.34", default-features = false}
+tiny-bip39 = { version = "0.8.2", default-features = false}
+zeroize = { version = "1.4", features = ["zeroize_derive"], default-features = false}
+rpassword = { version = "5.0", default-features = false }
 
 [dev-dependencies]
 dashmap.workspace = true
@@ -75,6 +82,12 @@ worker = { path = "../worker", package = "narwhal-worker" }
 storage = { path = "../storage", package = "narwhal-storage" }
 reqwest.workspace = true
 telemetry-subscribers.workspace = true
+
+[build-dependencies]
+prost-build.workspace = true
+rustversion.workspace = true
+tonic-build.workspace = true
+anemo-build.workspace = true
 
 [features]
 benchmark = []

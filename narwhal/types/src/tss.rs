@@ -39,3 +39,7 @@ pub struct TssAnemoVerifyRequest {
 pub struct TssAnemoVerifyResponse {
     pub message: String,
 }
+
+pub mod gg20 {}
+
+pub mod multisig {}

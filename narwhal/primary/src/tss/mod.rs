@@ -1,9 +1,24 @@
+mod encrypted_sled;
+mod gg20;
+mod kv_manager;
+mod mnemonic;
+// mod multisig;
 mod tss_keygen;
 mod tss_party;
 mod tss_service;
 mod tss_signer;
+mod narwhal_types {
+    pub use types::*;
+}
 use anemo::PeerId;
 use crypto::NetworkPublicKey;
+use narwhal_types::{
+    gg20_client,
+    gg20_client::Gg20Client,
+    message_in,
+    message_out::{self, KeygenResult},
+    ConditionalBroadcastReceiver, KeygenInit, KeygenOutput, MessageIn, SignInit, TrafficIn,
+};
 use network::CancelOnDropHandler;
 use network::RetryConfig;
 use std::{net::Ipv4Addr, sync::Arc};
@@ -12,14 +27,7 @@ use tracing::{info, warn};
 pub use tss_party::*;
 pub use tss_service::*;
 pub use tss_signer::*;
-use types::{
-    gg20_client, message_in,
-    message_out::{self, KeygenResult},
-    KeygenOutput, MessageIn, TrafficIn,
-};
-use types::{gg20_client::Gg20Client, KeygenInit};
-use types::{ConditionalBroadcastReceiver, SignInit};
-
+pub type TofndResult<R> = anyhow::Result<R>;
 pub async fn create_tofnd_client(
     port: u16,
 ) -> Result<Gg20Client<Channel>, tonic::transport::Error> {

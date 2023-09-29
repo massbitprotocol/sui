@@ -18,6 +18,10 @@ pub use proto::*;
 
 mod tss;
 pub use tss::*;
+
+mod tss_helpers;
+pub use tss_helpers::*;
+
 mod scalar;
 pub use scalar::*;
 
