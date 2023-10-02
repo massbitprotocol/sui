@@ -23,6 +23,76 @@ enum RoutingStatus {
 /// Receives incoming from a gRPC stream and broadcasts them to internal channels;
 /// Loops until client closes the socket, or a message containing [narwhal_types::message_in::Data::Abort] is received  
 /// Empty and unknown messages are ignored
+pub(super) async fn broadcast_messages_channel(
+    rx_message_in: &mut mpsc::UnboundedReceiver<narwhal_types::MessageIn>,
+    mut out_internal_channels: Vec<mpsc::UnboundedSender<Option<narwhal_types::TrafficIn>>>,
+    span: Span,
+) {
+    // loop until `stop` is received
+    loop {
+        // read message from stream
+        if let Some(msg_data) = rx_message_in.recv().await {
+            info!("Received message from grpc_stream");
+            // check incoming message
+            let traffic = match open_message_in(msg_data, span.clone()) {
+                RoutingStatus::Continue { traffic } => traffic,
+                RoutingStatus::Stop => break,
+                RoutingStatus::Skip => continue,
+            };
+
+            // send the message to all channels
+            for out_channel in &mut out_internal_channels {
+                let _ = out_channel.send(Some(traffic.clone()));
+            }
+        }
+    }
+}
+
+fn open_message_in(msg: narwhal_types::MessageIn, span: Span) -> RoutingStatus {
+    // start routing span
+    let route_span = span!(parent: &span, Level::INFO, "routing");
+    let _start = route_span.enter();
+
+    // get data option
+
+    // TODO examine why this happens: Sometimes, when the connection is
+    // closed by the client, instead of a `None` message, we get a `Some`
+    // message containing an "error reading a body from connection: protocol
+    // error: not a result of an error" error Removing for now to prevent this
+    // message from appearing while doing keygen/signs but will need to
+    // find out why this happens
+    // https://github.com/axelarnetwork/tofnd/issues/167
+
+    // get message data
+    let msg_data = match msg.data {
+        Some(data) => data,
+        None => {
+            warn!("ignore incoming msg: missing `data` field");
+            return RoutingStatus::Skip;
+        }
+    };
+
+    // match message data to types
+    let traffic = match msg_data {
+        narwhal_types::message_in::Data::Traffic(t) => t,
+        narwhal_types::message_in::Data::Abort(_) => {
+            warn!("received abort message");
+            return RoutingStatus::Stop;
+        }
+        narwhal_types::message_in::Data::KeygenInit(_)
+        | narwhal_types::message_in::Data::SignInit(_) => {
+            warn!("ignore incoming msg: expect `data` to be TrafficIn type");
+            return RoutingStatus::Skip;
+        }
+    };
+
+    // return traffic
+    RoutingStatus::Continue { traffic }
+}
+
+/// Receives incoming from a gRPC stream and broadcasts them to internal channels;
+/// Loops until client closes the socket, or a message containing [narwhal_types::message_in::Data::Abort] is received  
+/// Empty and unknown messages are ignored
 pub(super) async fn broadcast_messages(
     in_grpc_stream: &mut tonic::Streaming<narwhal_types::MessageIn>,
     mut out_internal_channels: Vec<mpsc::UnboundedSender<Option<narwhal_types::TrafficIn>>>,

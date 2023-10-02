@@ -9,8 +9,8 @@ pub(super) type MessageDigest = tofn::gg20::sign::MessageDigest;
 
 #[derive(Clone, Debug)]
 pub struct Config {
-    pub ip: String,
-    pub port: u16,
+    // pub ip: String,
+    // pub port: u16,
     pub safe_keygen: bool,
     pub mnemonic_cmd: Cmd,
     pub tofnd_path: PathBuf,

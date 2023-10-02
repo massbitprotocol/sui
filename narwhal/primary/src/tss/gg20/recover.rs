@@ -24,7 +24,7 @@ use std::convert::TryInto;
 impl Gg20Service {
     pub(super) async fn handle_recover(
         &self,
-        request: narwhal_types::RecoverRequest,
+        request: narwhal_types::gg20::RecoverRequest,
     ) -> TofndResult<()> {
         // get keygen init sanitized from request
         let keygen_init = {

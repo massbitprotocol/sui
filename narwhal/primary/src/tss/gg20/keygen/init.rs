@@ -61,7 +61,7 @@ impl Gg20Service {
 
     // makes all needed assertions on incoming data, and create structures that are
     // needed for the execution of the protocol
-    async fn process_keygen_init(
+    pub(super) async fn process_keygen_init(
         &self,
         keygen_init: narwhal_types::KeygenInit,
     ) -> anyhow::Result<(KeygenInitSanitized, KeyReservation)> {

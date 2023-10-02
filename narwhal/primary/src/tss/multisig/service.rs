@@ -1,6 +1,6 @@
 use tonic::Response;
 use tonic::Status;
-
+include!(concat!(env!("OUT_DIR"), "/multisig.MultisigPeer.rs"));
 use crate::kv_manager::KvManager;
 
 use tracing::{error, info};

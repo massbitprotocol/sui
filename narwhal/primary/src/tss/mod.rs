@@ -12,6 +12,7 @@ mod narwhal_types {
 }
 use anemo::PeerId;
 use crypto::NetworkPublicKey;
+pub use gg20::*;
 use narwhal_types::{
     gg20_client,
     gg20_client::Gg20Client,
@@ -24,6 +25,7 @@ use network::RetryConfig;
 use std::{net::Ipv4Addr, sync::Arc};
 use tonic::transport::Channel;
 use tracing::{info, warn};
+pub mod proto;
 pub use tss_party::*;
 pub use tss_service::*;
 pub use tss_signer::*;

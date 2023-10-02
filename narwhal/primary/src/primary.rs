@@ -1,6 +1,7 @@
 // Copyright (c) 2021, Facebook, Inc. and its affiliates
 // Copyright (c) Mysten Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
+use crate::tss::proto::{gg20_peer_server::Gg20PeerServer, Gg20AnemoService};
 use crate::{
     block_synchronizer::{handler::BlockSynchronizerHandler, BlockSynchronizer},
     block_waiter::BlockWaiter,
@@ -9,8 +10,7 @@ use crate::{
     grpc_server::ConsensusAPIGrpc,
     metrics::{initialise_metrics, PrimaryMetrics},
     proposer::{OurDigestMessage, Proposer},
-    scalar_event::ScalarEventService,
-    scalar_event::{self, ScalarEventHandler},
+    scalar_event::{ScalarEventHandler, ScalarEventService},
     state_handler::StateHandler,
     synchronizer::Synchronizer,
     tss::{TssParty, TssPeerService},
@@ -58,11 +58,10 @@ use std::{
     time::Duration,
 };
 use storage::{
-    CertificateStore, EventStore, HeaderStore, PayloadStore, ProposerStore, TssStore,
-    VoteDigestStore,
+    CertificateStore, EventStore, HeaderStore, PayloadStore, ProposerStore, VoteDigestStore,
 };
 use sui_protocol_config::ProtocolConfig;
-use tokio::sync::{mpsc::UnboundedReceiver, RwLock};
+use tokio::sync::mpsc::UnboundedReceiver;
 use tokio::{sync::watch, task::JoinHandle};
 use tokio::{
     sync::{mpsc, oneshot},
@@ -83,7 +82,6 @@ use types::{
     SendCertificateResponse, TssPeerServer, Vote, VoteInfoAPI, WorkerOthersBatchMessage,
     WorkerOurBatchMessage, WorkerOwnBatchMessage, WorkerToPrimary, WorkerToPrimaryServer,
 };
-
 #[cfg(any(test))]
 #[path = "tests/primary_tests.rs"]
 pub mod primary_tests;
@@ -300,24 +298,30 @@ impl Primary {
         // Channel for communication between Tss spawn and Anemo Tss service
         let (tx_tss_keygen, rx_tss_keygen) = mpsc::unbounded_channel();
         let (tx_tss_sign, rx_tss_sign) = mpsc::unbounded_channel();
+        let (tx_message_out, rx_message_out) = mpsc::unbounded_channel();
         // Send sign init from Scalar Event handler to Tss spawn
         let (tx_tss_sign_init, rx_tss_sign_init) = mpsc::unbounded_channel();
         // Send sign result from tss spawn to Scalar handler
         let (tx_tss_sign_result, rx_tss_sign_result) = mpsc::unbounded_channel();
 
-        let tss_service = TssPeerServer::new(TssPeerService::new(
-            tx_tss_keygen.clone(),
-            tx_tss_sign.clone(),
-        ));
+        // let tss_service = TssPeerServer::new(TssPeerService::new(
+        //     tx_tss_keygen.clone(),
+        //     tx_tss_sign.clone(),
+        // ));
         let scalar_event_service = ScalarEventServer::new(ScalarEventService::new(
             committee.clone(),
             event_store.clone(),
             tx_tss_sign_init,
         ));
+        let gg20_service = Gg20PeerServer::new(Gg20AnemoService::new(
+            tx_tss_keygen.clone(),
+            tx_tss_sign.clone(),
+        ));
         let routes = anemo::Router::new()
             .add_rpc_service(primary_service)
-            .add_rpc_service(tss_service)
+            //.add_rpc_service(tss_service)
             .add_rpc_service(scalar_event_service)
+            .add_rpc_service(gg20_service)
             .route_layer(RequireAuthorizationLayer::new(AllowedEpoch::new(
                 epoch_string.clone(),
             )))
@@ -500,7 +504,7 @@ impl Primary {
         );
 
         let signature_service = SignatureService::new(signer.copy());
-        let tss_handle = TssParty::spawn(
+        let tss_handles = TssParty::spawn_v2(
             authority.clone(),
             committee.clone(),
             network.clone(),
@@ -508,6 +512,7 @@ impl Primary {
             rx_tss_keygen,
             tx_tss_sign,
             rx_tss_sign,
+            rx_message_out,
             rx_tss_sign_init,
             tx_tss_sign_result,
             tx_shutdown.subscribe(),
@@ -564,10 +569,9 @@ impl Primary {
             certificate_fetcher_handle,
             proposer_handle,
             connection_monitor_handle,
-            tss_handle,
             scalar_event_handle,
         ];
-
+        handles.extend(tss_handles);
         handles.extend(admin_handles);
 
         // If a DAG component is present then we are not using the internal consensus (Bullshark)

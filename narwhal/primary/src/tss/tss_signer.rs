@@ -356,4 +356,89 @@ impl TssSigner {
     pub async fn handle_sign_result(&self, sign_init: &SignInit, sign_result: &SignResult) {
         info!("Sign result {:?}, {:?}", sign_init, sign_result);
     }
+
+    pub async fn sign_execute_v2(
+        &self,
+        sign_server_outgoing: &mut UnboundedReceiver<Result<MessageOut, Status>>,
+        sign_init: &SignInit,
+    ) -> Result<SignResult, tonic::Status> {
+        #[allow(unused_variables)]
+        let all_share_count = sign_init.party_uids.len();
+        #[allow(unused_variables)]
+        let mut msg_count = 1;
+        // the first outbound message is keygen init info
+        info!("Send tss sign request to gRPC server");
+        self.tx_sign
+            .send(MessageIn {
+                data: Some(message_in::Data::SignInit(sign_init.clone())),
+            })
+            .unwrap();
+        let my_uid = self.uid.clone();
+        let result = loop {
+            match sign_server_outgoing.recv().await {
+                Some(Ok(msg)) => {
+                    let msg_type = msg.data.as_ref().expect("missing data");
+                    match msg_type {
+                        #[allow(unused_variables)] // allow unsused traffin in non malicious
+                        message_out::Data::Traffic(traffic) => {
+                            // in malicous case, if we are stallers we skip the message
+                            #[cfg(feature = "malicious")]
+                            {
+                                let round = sign_round(msg_count, all_share_count, my_share_count);
+                                if self.malicious_data.timeout_round == round {
+                                    warn!(
+                                        "{} is stalling a message in round {}",
+                                        my_uid,
+                                        round - 4
+                                    ); // subtract keygen rounds
+                                    continue; // tough is the life of the staller
+                                }
+                                if self.malicious_data.disrupt_round == round {
+                                    warn!("{} is disrupting a message in round {}", my_uid, round);
+                                    let mut t = traffic.clone();
+                                    t.payload =
+                                        traffic.payload[0..traffic.payload.len() / 2].to_vec();
+                                    let mut m = msg.clone();
+                                    m.data = Some(proto::message_out::Data::Traffic(t));
+                                    self.deliver_sign(&m);
+                                }
+                            }
+                            self.deliver_sign(&msg).await;
+                        }
+                        message_out::Data::SignResult(res) => {
+                            info!("party [{}] sign finished with result {:?}", my_uid, res);
+                            break Ok(res.clone());
+                        }
+                        message_out::Data::NeedRecover(_) => {
+                            info!("party [{}] needs recover", my_uid);
+                            // when recovery is needed, sign is canceled. We abort the protocol manualy instead of waiting parties to time out
+                            // no worries that we don't wait for enough time, we will not be checking criminals in this case
+                            // delivery.send_timeouts(0);
+                            break Ok(SignResult::default());
+                        }
+                        _ => {
+                            panic!("party [{}] sign error: bad outgoing message type", my_uid)
+                        }
+                    };
+                    msg_count += 1;
+                }
+                Some(Err(e)) => {
+                    warn!(
+                        "party [{}] keygen execution was not completed due to error {:?}",
+                        my_uid, e
+                    );
+                    return Ok(SignResult::default());
+                }
+
+                None => {
+                    warn!(
+                        "party [{}] sign execution was not completed due to abort",
+                        my_uid
+                    );
+                    return Ok(SignResult::default());
+                }
+            }
+        };
+        result
+    }
 }
