@@ -22,14 +22,12 @@
 
  // ScalarAbciRequest is the request for ScalarAbci.
  message ScalarAbciRequest {
-   string namespace = 1;
-   bytes message = 2; 
+   string payload = 1; 
  }
 
  // ScalarAbciResponse is the response for ScalarAbci.
  message ScalarAbciResponse {
-   string namespace = 1;
-   bytes message = 2; 
+   string message = 1; 
  }
 
  // Echo is the echo service.

@@ -3,18 +3,14 @@
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ScalarAbciRequest {
     #[prost(string, tag = "1")]
-    pub namespace: ::prost::alloc::string::String,
-    #[prost(bytes = "vec", tag = "2")]
-    pub message: ::prost::alloc::vec::Vec<u8>,
+    pub payload: ::prost::alloc::string::String,
 }
 /// ScalarAbciResponse is the response for ScalarAbci.
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ScalarAbciResponse {
     #[prost(string, tag = "1")]
-    pub namespace: ::prost::alloc::string::String,
-    #[prost(bytes = "vec", tag = "2")]
-    pub message: ::prost::alloc::vec::Vec<u8>,
+    pub message: ::prost::alloc::string::String,
 }
 /// Generated client implementations.
 pub mod scalar_abci_client {
