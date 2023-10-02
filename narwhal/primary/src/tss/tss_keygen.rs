@@ -530,7 +530,7 @@ impl TssKeyGenerator {
                             //info!("TssPeerClient keygen result {:?}", r);
                         }
                         Err(e) => {
-                            info!("TssPeerClient keygen error {:?}", e);
+                            info!("GgG2G0PeerClient keygen error {:?}", e);
                         }
                     }
                     result

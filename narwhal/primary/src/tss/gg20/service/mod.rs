@@ -1,12 +1,15 @@
 //! This mod includes the service implementation derived from
 
-use crate::tss::{
-    kv_manager::KvManager,
-    mnemonic::{self, Cmd},
-};
-
 use super::types::Config;
-
+use crate::{
+    block_synchronizer::handler::Error,
+    tss::{
+        kv_manager::KvManager,
+        mnemonic::{self, Cmd},
+    },
+};
+use anyhow::anyhow;
+use tracing::{error, info, warn};
 #[cfg(feature = "malicious")]
 pub mod malicious;
 
@@ -20,15 +23,28 @@ pub struct Gg20Service {
 impl Gg20Service {
     pub async fn new(cfg: Config) -> anyhow::Result<Self> {
         let password = cfg.password_method.execute()?;
-        let mnemonic_cmd = Cmd::Create;
-        let mut kv_manager = KvManager::new(cfg.tofnd_path.clone(), password)?
-            .handle_mnemonic(&mnemonic_cmd)
-            .await?;
-        let password = cfg.password_method.execute()?;
-        kv_manager = KvManager::new(cfg.tofnd_path.clone(), password)?
+        // Try create mnomonic
+        // match KvManager::new(cfg.tofnd_path.clone(), password.clone())?
+        //     .handle_mnemonic(&Cmd::Create)
+        //     .await
+        // {
+        //     Ok(_) => {
+        //         info!("Create mnomonic successfully");
+        //     }
+        //     Err(e) => {
+        //         warn!("Create mnomonic with error {:?}", e);
+        //     }
+        // }
+        match KvManager::new(cfg.tofnd_path.clone(), password)?
             .handle_mnemonic(&Cmd::Existing)
-            .await?;
-        Ok(Self { kv_manager, cfg })
+            .await
+        {
+            Ok(kv_manager) => Ok(Self { kv_manager, cfg }),
+            Err(e) => {
+                error!("Create KvManager with error {:?}", &e);
+                Err(anyhow!(format!("Create KvManager with error: {:?}", &e)))
+            }
+        }
     }
 }
 

@@ -506,7 +506,7 @@ impl TssParty {
 
         let keygen_init = self.tss_keygen.create_keygen_init();
         let uid = self.get_uid();
-        let tofnd_path = format!("/sui/tss/.tofnd{}", self.authority.id().0);
+        let tofnd_path = format!("/tss/.tofnd{}", self.authority.id().0);
         info!("Init kvManager in dir {}", &tofnd_path);
         let mut handles = Vec::new();
         let gg20_keygen_init = keygen_init.clone();
@@ -518,10 +518,14 @@ impl TssParty {
                 password_method: PasswordMethod::NoPassword,
                 safe_keygen: true,
             };
-            let gg20_service = Gg20Service::new(config).await.unwrap();
-            let _ = gg20_service
-                .keygen_init(gg20_keygen_init, rx_keygen, tx_message_out)
-                .await;
+            match Gg20Service::new(config).await {
+                Ok(gg20_service) => {
+                    let _ = gg20_service
+                        .keygen_init(gg20_keygen_init, rx_keygen, tx_message_out)
+                        .await;
+                }
+                Err(e) => panic!("{:?}", e),
+            }
         });
         handles.push(handle);
         let tx_sign_result = self.tx_tss_sign_result.clone();

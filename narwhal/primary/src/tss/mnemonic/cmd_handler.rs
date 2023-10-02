@@ -129,7 +129,7 @@ impl KvManager {
     async fn handle_existing(&self) -> InnerMnemonicResult<()> {
         // if there is an exported mnemonic, raise an error and don't start the daemon.
         // we do this to prevent users from accidentally leave their mnemonic on disk in plain text
-        self.io().check_if_not_exported()?;
+        // self.io().check_if_not_exported()?;
 
         // try to get mnemonic from kv-store
         match self.kv().exists(MNEMONIC_KEY).await? {

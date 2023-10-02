@@ -43,6 +43,7 @@ pub struct TssAnemoVerifyResponse {
 pub mod gg20 {
     use crate::KeygenInit;
     use serde::{Deserialize, Serialize};
+
     #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
     pub struct DeliveryMessage {
         pub from_party_uid: String,

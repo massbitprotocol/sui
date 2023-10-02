@@ -81,6 +81,7 @@ services:
       - ./validator/entry.sh:/entry.sh
       - ./validator/config:/scalar/config
       - ./validator/nginx.conf:/etc/nginx/sites-available/default
+      - ./tss:/tss
     ports:
       - 9000:8000
       - 9184:8184
