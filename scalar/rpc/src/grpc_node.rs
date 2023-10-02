@@ -402,8 +402,7 @@ impl ScalarAbci for GrpcService {
 
         // creating infinite stream with requested message
         let repeat = std::iter::repeat(ScalarAbciResponse {
-            namespace: NAMESPACE.to_string(),
-            message: req.into_inner().message,
+            message: req.into_inner().payload,
         });
         let mut stream = Box::pin(tokio_stream::iter(repeat).throttle(Duration::from_millis(200)));
 
@@ -462,10 +461,7 @@ impl ScalarAbci for GrpcService {
                 info!("Consensus made transactions {:?}", &trans);
                 for event_trans in trans.into_iter() {
                     let json = serde_json::to_string(&event_trans).unwrap();
-                    let abci_response = ScalarAbciResponse {
-                        namespace: NAMESPACE.to_string(),
-                        message: json.into_bytes(),
-                    };
+                    let abci_response = ScalarAbciResponse { message: json };
                     let _ = tx_abci_trans.send(Ok(abci_response)).await;
                 }
             }
@@ -475,19 +471,18 @@ impl ScalarAbci for GrpcService {
             while let Some(result) = in_stream.next().await {
                 match result {
                     Ok(v) => {
-                        let message = v.message.clone();
+                        let message = v.payload.clone();
                         info!(
                             "ScalarAbciServer::receiver message {:?}, then send to narwhal via tx_external_message",
                             &message
                         );
-                        let external_message = ExternalMessage::new(message.clone());
+                        let external_message = ExternalMessage::new(message.clone().into_bytes());
                         let _ = tx_external_message.send(external_message);
                         let _ = tx_transaction.send(v.clone()).await;
                         //client.send_transaction(v).await;
                         let send_response = tx_abci
                             .send(Ok(ScalarAbciResponse {
-                                namespace: NAMESPACE.to_string(),
-                                message: "Ark".to_string().into_bytes(),
+                                message: "Ark".to_string(),
                             }))
                             .await;
                         if let Err(_err) = send_response {
@@ -557,17 +552,14 @@ impl AnemoClient {
         LocalNarwhalClient::get_global(&target).unwrap().load()
     }
     async fn send_transaction(&self, trans: ScalarAbciRequest) {
-        println!(
-            "Call anemo client send_transaction {}",
-            String::from_utf8(trans.message.clone()).unwrap()
-        );
+        println!("Call anemo client send_transaction {}", &trans.payload);
         //Remote client
         let mut remote_client = self.create_remote_client();
-        let mut local_client = self.create_local_client();
+        let local_client = self.create_local_client();
         //let epoch = self.committee.epoch();
         let request = TransactionProto {
             //transaction: Bytes::from(epoch.to_be_bytes().to_vec()),
-            transaction: Bytes::from(trans.message),
+            transaction: Bytes::from(trans.payload),
         };
         // This transaciton must be ConsensusTransaction
         //let result = local_client.submit_transaction(trans.message).await;

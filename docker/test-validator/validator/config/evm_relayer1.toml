@@ -7,7 +7,7 @@ start_with_bridge = false
 
 [[relayer_evm]]
 name = "Goerli"
-call_contract = "0xe432150cce91c13a887f7D836923d5597adD8E31"
+call_contract = "0x10A69f82Ed4E8E058b399f8aA5216Aa2602C7a52"
 rpc_addr = "https://eth-goerli.g.alchemy.com/v2/DpCscOiv_evEPscGYARI3cOVeJ59CRo8"
 ws_addr = "wss://eth-goerli.g.alchemy.com/v2/DpCscOiv_evEPscGYARI3cOVeJ59CRo8"
 start_with_bridge = true
