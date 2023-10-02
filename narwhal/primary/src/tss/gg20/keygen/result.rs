@@ -5,12 +5,13 @@
 //!  3. all secret share recovery info - information used to allow client to issue secret share recovery in case of data loss; sent to client
 
 use tofn::{gg20::keygen::SecretKeyShare, sdk::api::serialize};
+use types::KeyReservation;
 
 use super::{
     types::{BytesVec, KeygenInitSanitized, TofnKeygenOutput, TofndKeygenOutput},
     Gg20Service,
 };
-use crate::tss::{gg20::types::PartyInfo, kv_manager::KeyReservation, narwhal_types};
+use crate::tss::{gg20::types::PartyInfo, narwhal_types};
 
 // tonic cruft
 use tokio::sync::{
@@ -38,10 +39,7 @@ impl Gg20Service {
         let keygen_outputs = match Self::aggregate_keygen_outputs(aggregator_receivers).await {
             Ok(keygen_outputs) => keygen_outputs,
             Err(err) => {
-                self.kv_manager
-                    .kv()
-                    .unreserve_key(key_uid_reservation)
-                    .await;
+                self.unreserve_key(&key_uid_reservation).await;
                 return Err(anyhow!(
                     "Error at Keygen output aggregation. Unreserving key {}",
                     err
@@ -66,9 +64,7 @@ impl Gg20Service {
         );
 
         // try to put data inside kv store
-        self.kv_manager
-            .kv()
-            .put(key_uid_reservation, kv_data.try_into()?)
+        self.put(&key_uid_reservation, kv_data)
             .await
             .map_err(|err| anyhow!(err))?;
 

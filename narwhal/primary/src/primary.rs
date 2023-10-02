@@ -13,7 +13,7 @@ use crate::{
     scalar_event::{ScalarEventHandler, ScalarEventService},
     state_handler::StateHandler,
     synchronizer::Synchronizer,
-    tss::{TssParty, TssPeerService},
+    tss::TssParty,
     BlockRemover,
 };
 use anemo::{codegen::InboundRequestLayer, types::Address};
@@ -58,7 +58,8 @@ use std::{
     time::Duration,
 };
 use storage::{
-    CertificateStore, EventStore, HeaderStore, PayloadStore, ProposerStore, VoteDigestStore,
+    CertificateStore, EventStore, HeaderStore, PayloadStore, ProposerStore, TssStore,
+    VoteDigestStore,
 };
 use sui_protocol_config::ProtocolConfig;
 use tokio::sync::mpsc::UnboundedReceiver;
@@ -115,6 +116,7 @@ impl Primary {
         payload_store: PayloadStore,
         vote_digest_store: VoteDigestStore,
         event_store: EventStore,
+        tss_store: TssStore,
         tx_new_certificates: Sender<Certificate>,
         rx_committed_certificates: Receiver<(Round, Vec<Certificate>)>,
         rx_consensus_round_updates: watch::Receiver<ConsensusRound>,
@@ -508,6 +510,7 @@ impl Primary {
             authority.clone(),
             committee.clone(),
             network.clone(),
+            tss_store,
             tx_tss_keygen,
             rx_tss_keygen,
             tx_tss_sign,

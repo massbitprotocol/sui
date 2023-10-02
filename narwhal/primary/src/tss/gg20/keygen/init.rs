@@ -10,12 +10,13 @@ use tracing::Span;
 
 // error handling
 use anyhow::anyhow;
+use types::KeyReservation;
 
 use super::{
     types::{KeygenInitSanitized, MAX_PARTY_SHARE_COUNT, MAX_TOTAL_SHARE_COUNT},
     Gg20Service,
 };
-use crate::tss::{kv_manager::KeyReservation, narwhal_types};
+use crate::tss::narwhal_types;
 
 impl Gg20Service {
     /// Receives a message from the stream and tries to handle keygen init operations.
@@ -66,14 +67,12 @@ impl Gg20Service {
         keygen_init: narwhal_types::KeygenInit,
     ) -> anyhow::Result<(KeygenInitSanitized, KeyReservation)> {
         // try to sanitize arguments
-        let keygen_init = Self::keygen_sanitize_args(keygen_init)
+        let keygen_init: KeygenInitSanitized = Self::keygen_sanitize_args(keygen_init)
             .map_err(|err| anyhow!("failed to sanitize KeygenInit: {}", err))?;
 
         // reserve key
-        let key_uid_reservation = self
-            .kv_manager
-            .kv()
-            .reserve_key(keygen_init.new_key_uid.clone())
+        let key_uid_reservation: String = self
+            .reserve_key(&keygen_init.new_key_uid)
             .await
             .map_err(|err| anyhow!("failed to reseve key: {}", err))?;
 

@@ -44,15 +44,23 @@ impl Gg20Service {
         };
         debug!("Hanle sign init key uid {:?}", &sign_init.key_uid);
         // try to get party info related to session id
-        let party_info: PartyInfo = match self.kv_manager.kv().get(&sign_init.key_uid).await {
-            Ok(value) => value.try_into()?,
-            Err(err) => {
-                // if no such session id exists, send a message to client that indicates that recovery is needed and stop sign
+        let party_info: PartyInfo = match self.get::<PartyInfo>(&sign_init.key_uid).await {
+            Ok(value) => value,
+            _ => {
                 Self::send_kv_store_failure(out_stream)?;
                 let err = anyhow!("Unable to find session-id {} in kv store. Issuing share recovery and exit sign {:?}", sign_init.key_uid, err);
                 return Err(err);
             }
         };
+        // let party_info: PartyInfo = match self.kv_manager.kv().get(&sign_init.key_uid).await {
+        //     Ok(value) => value.try_into()?,
+        //     Err(err) => {
+        //         // if no such session id exists, send a message to client that indicates that recovery is needed and stop sign
+        //         Self::send_kv_store_failure(out_stream)?;
+        //         let err = anyhow!("Unable to find session-id {} in kv store. Issuing share recovery and exit sign {:?}", sign_init.key_uid, err);
+        //         return Err(err);
+        //     }
+        // };
         debug!("try to sanitize arguments");
         // try to sanitize arguments
         let sign_init = Self::sign_sanitize_args(sign_init, &party_info.tofnd.party_uids)?;

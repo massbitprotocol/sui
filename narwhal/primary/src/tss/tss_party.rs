@@ -11,6 +11,7 @@ use k256::elliptic_curve::ScalarPrimitive;
 use k256::EncodedPoint;
 use k256::ProjectivePoint;
 use std::net::Ipv4Addr;
+use storage::TssStore;
 use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
 use tokio::task::JoinHandle;
 use tokio::time::Duration;
@@ -45,6 +46,7 @@ pub struct TssParty {
     authority: Authority,
     committee: Committee,
     network: Network,
+    tss_store: TssStore,
     tss_keygen: TssKeyGenerator,
     tss_signer: TssSigner,
     tx_keygen: UnboundedSender<MessageIn>,
@@ -56,6 +58,7 @@ impl TssParty {
         authority: Authority,
         committee: Committee,
         network: Network,
+        tss_store: TssStore,
         tss_keygen: TssKeyGenerator,
         tss_signer: TssSigner,
         tx_keygen: UnboundedSender<MessageIn>,
@@ -66,6 +69,7 @@ impl TssParty {
             authority,
             committee,
             network,
+            tss_store,
             tss_keygen,
             tss_signer,
             tx_keygen,
@@ -510,6 +514,7 @@ impl TssParty {
         info!("Init kvManager in dir {}", &tofnd_path);
         let mut handles = Vec::new();
         let gg20_keygen_init = keygen_init.clone();
+        let tss_store = self.tss_store.clone();
         let handle = tokio::spawn(async move {
             //Start gg20 service with kv_manager
             let config = Config {
@@ -518,14 +523,18 @@ impl TssParty {
                 password_method: PasswordMethod::NoPassword,
                 safe_keygen: true,
             };
-            match Gg20Service::new(config).await {
-                Ok(gg20_service) => {
-                    let _ = gg20_service
-                        .keygen_init(gg20_keygen_init, rx_keygen, tx_message_out)
-                        .await;
-                }
-                Err(e) => panic!("{:?}", e),
-            }
+            let gg20_service = Gg20Service::new(tss_store);
+            let _ = gg20_service
+                .keygen_init(gg20_keygen_init, rx_keygen, tx_message_out)
+                .await;
+            // match Gg20Service::new(config).await {
+            //     Ok(gg20_service) => {
+            //         let _ = gg20_service
+            //             .keygen_init(gg20_keygen_init, rx_keygen, tx_message_out)
+            //             .await;
+            //     }
+            //     Err(e) => panic!("{:?}", e),
+            // }
         });
         handles.push(handle);
         let tx_sign_result = self.tx_tss_sign_result.clone();
@@ -717,6 +726,7 @@ impl TssParty {
         authority: Authority,
         committee: Committee,
         network: Network,
+        tss_store: TssStore,
         tx_keygen: UnboundedSender<MessageIn>,
         rx_keygen: UnboundedReceiver<MessageIn>,
         tx_sign: UnboundedSender<MessageIn>,
@@ -741,6 +751,7 @@ impl TssParty {
             authority.clone(),
             committee.clone(),
             network.clone(),
+            tss_store,
             tss_keygen,
             tss_signer,
             tx_keygen,
@@ -755,6 +766,7 @@ impl TssParty {
         authority: Authority,
         committee: Committee,
         network: Network,
+        tss_store: TssStore,
         tx_keygen: UnboundedSender<MessageIn>,
         rx_keygen: UnboundedReceiver<MessageIn>,
         tx_sign: UnboundedSender<MessageIn>,
@@ -780,6 +792,7 @@ impl TssParty {
             authority.clone(),
             committee.clone(),
             network.clone(),
+            tss_store,
             tss_keygen,
             tss_signer,
             tx_keygen,

@@ -13,16 +13,16 @@ pub(super) const DEFAULT_KV_PATH: &str = "kvstore";
 pub(super) const DEFAULT_RESERVE: &str = "";
 
 /// Returned from a successful `ReserveKey` command
-#[derive(Debug)] // disallow derive Clone, Copy
-pub struct KeyReservation {
-    pub(super) key: String,
-}
-/// kv store needs PartialEq to complare values
-impl PartialEq for KeyReservation {
-    fn eq(&self, other: &Self) -> bool {
-        self.key == other.key
-    }
-}
+// #[derive(Debug)] // disallow derive Clone, Copy
+// pub struct KeyReservation {
+//     pub(super) key: String,
+// }
+// /// kv store needs PartialEq to complare values
+// impl PartialEq for KeyReservation {
+//     fn eq(&self, other: &Self) -> bool {
+//         self.key == other.key
+//     }
+// }
 
 // Provided by the requester and used by the manager task to send the command response back to the requester.
 type Responder<T> = tokio::sync::oneshot::Sender<super::error::InnerKvResult<T>>;

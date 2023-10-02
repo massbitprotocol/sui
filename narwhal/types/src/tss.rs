@@ -1,6 +1,18 @@
-use anemo::{types::request::IntoRequest, Request};
 use serde::{Deserialize, Serialize};
-use tracing::info;
+
+pub type KvValue = Vec<u8>;
+pub type KeyReservation = String;
+// /// Returned from a successful `ReserveKey` command
+// #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)] // disallow derive Clone, Copy
+// pub struct KeyReservation {
+//     pub(super) key: String,
+// }
+// /// kv store needs PartialEq to complare values
+// impl PartialEq for KeyReservation {
+//     fn eq(&self, other: &Self) -> bool {
+//         self.key == other.key
+//     }
+// }
 
 /// Used by workers to send a new batch.
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]

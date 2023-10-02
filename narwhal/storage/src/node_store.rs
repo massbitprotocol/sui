@@ -5,8 +5,8 @@ use crate::payload_store::PayloadStore;
 use crate::proposer_store::ProposerKey;
 use crate::vote_digest_store::VoteDigestStore;
 use crate::{
-    CertificateStore, CertificateStoreCache, CertificateStoreCacheMetrics, ConsensusStore,
-    EventStore, HeaderStore, ProposerStore,
+    tss_store, CertificateStore, CertificateStoreCache, CertificateStoreCacheMetrics,
+    ConsensusStore, EventStore, HeaderStore, ProposerStore, TssStore,
 };
 use config::{AuthorityIdentifier, WorkerId};
 use std::num::NonZeroUsize;
@@ -15,11 +15,9 @@ use std::time::Duration;
 use store::metrics::SamplingInterval;
 use store::reopen;
 use store::rocks::{default_db_options, open_cf_opts, DBMap, MetricConf, ReadWriteOptions};
-use tokio::sync::RwLock;
-use tracing::Event;
 use types::{
     Batch, BatchDigest, Certificate, CertificateDigest, CommittedSubDagShell, ConsensusCommit,
-    Header, HeaderDigest, Round, SequenceNumber, VoteInfo,
+    Header, HeaderDigest, KeyReservation, KvValue, Round, SequenceNumber, VoteInfo,
 };
 use types::{EventDigest, EventVerify};
 
@@ -37,6 +35,7 @@ pub struct NodeStorage {
     pub batch_store: DBMap<BatchDigest, Batch>,
     pub consensus_store: Arc<ConsensusStore>,
     pub event_store: EventStore,
+    pub tss_store: TssStore,
 }
 
 impl NodeStorage {
@@ -44,7 +43,6 @@ impl NodeStorage {
     pub(crate) const LAST_PROPOSED_CF: &'static str = "last_proposed";
     pub(crate) const VOTES_CF: &'static str = "votes";
     pub(crate) const HEADERS_CF: &'static str = "headers";
-    pub(crate) const EVENTS_CF: &'static str = "events";
     pub(crate) const CERTIFICATES_CF: &'static str = "certificates";
     pub(crate) const CERTIFICATE_DIGEST_BY_ROUND_CF: &'static str = "certificate_digest_by_round";
     pub(crate) const CERTIFICATE_DIGEST_BY_ORIGIN_CF: &'static str = "certificate_digest_by_origin";
@@ -53,7 +51,9 @@ impl NodeStorage {
     pub(crate) const LAST_COMMITTED_CF: &'static str = "last_committed";
     pub(crate) const SUB_DAG_INDEX_CF: &'static str = "sub_dag";
     pub(crate) const COMMITTED_SUB_DAG_INDEX_CF: &'static str = "committed_sub_dag";
-
+    // For Scalar
+    pub(crate) const EVENTS_CF: &'static str = "events";
+    pub(crate) const TSSES_CF: &'static str = "tsses";
     // 100 nodes * 60 rounds (assuming 1 round/sec this will hold data for about the last 1 minute
     // which should be more than enough for advancing the protocol and also help other nodes)
     // TODO: take into account committee size instead of having fixed 100.
@@ -80,6 +80,13 @@ impl NodeStorage {
             ),
             (
                 Self::EVENTS_CF,
+                default_db_options()
+                    .optimize_for_write_throughput()
+                    .optimize_for_large_values_no_scan(1 << 10)
+                    .options,
+            ),
+            (
+                Self::TSSES_CF,
                 default_db_options()
                     .optimize_for_write_throughput()
                     .optimize_for_large_values_no_scan(1 << 10)
@@ -119,6 +126,7 @@ impl NodeStorage {
             votes_map,
             header_map,
             event_map,
+            tss_map,
             certificate_map,
             certificate_digest_by_round_map,
             certificate_digest_by_origin_map,
@@ -132,6 +140,7 @@ impl NodeStorage {
             Self::VOTES_CF;<AuthorityIdentifier, VoteInfo>,
             Self::HEADERS_CF;<HeaderDigest, Header>,
             Self::EVENTS_CF;<EventDigest, EventVerify>,
+            Self::TSSES_CF;<KeyReservation, KvValue>,
             Self::CERTIFICATES_CF;<CertificateDigest, Certificate>,
             Self::CERTIFICATE_DIGEST_BY_ROUND_CF;<(Round, AuthorityIdentifier), CertificateDigest>,
             Self::CERTIFICATE_DIGEST_BY_ORIGIN_CF;<(AuthorityIdentifier, Round), CertificateDigest>,
@@ -164,6 +173,7 @@ impl NodeStorage {
             committed_sub_dag_map,
         ));
         let event_store = EventStore::new(event_map);
+        let tss_store = TssStore::new(tss_map);
         Self {
             proposer_store,
             vote_digest_store,
@@ -173,6 +183,7 @@ impl NodeStorage {
             batch_store,
             consensus_store,
             event_store,
+            tss_store,
         }
     }
 }
