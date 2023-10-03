@@ -10,7 +10,7 @@ use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 use tokio_stream::wrappers::UnboundedReceiverStream;
 use tonic::Status;
 use tonic::Streaming;
-use tracing::{info, warn};
+use tracing::{error, info, warn};
 use types::gg20;
 use types::{
     message_in,
@@ -491,11 +491,7 @@ impl TssKeyGenerator {
                 payload: msg.payload.clone(),
             })),
         };
-        //Send to own tofnd gGpc Server
-        info!(
-            "Send message {:?} to the local gRPC server via channel",
-            &msg_in
-        );
+        info!("Send received message to the local gg20 Service via channel");
         let _ = self.tx_keygen.send(msg_in);
         let mut handlers = Vec::new();
         let peers = self
@@ -509,6 +505,7 @@ impl TssKeyGenerator {
             is_broadcast: msg.is_broadcast,
             payload: msg.payload.clone(),
         };
+        info!("Then broadcast it to {} other peers", peers.len());
         //Send to other peers vis anemo network
         for peer in peers {
             let network = self.network.clone();
@@ -527,10 +524,10 @@ impl TssKeyGenerator {
                     let result = Gg20PeerClient::new(peer).keygen(request).await;
                     match result.as_ref() {
                         Ok(r) => {
-                            //info!("TssPeerClient keygen result {:?}", r);
+                            //info!("Gg0PeerClient keygen result {:?}", r);
                         }
                         Err(e) => {
-                            info!("GgG2G0PeerClient keygen error {:?}", e);
+                            error!("Gg0PeerClient keygen error {:?}", e);
                         }
                     }
                     result

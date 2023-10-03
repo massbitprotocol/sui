@@ -12,7 +12,7 @@ pub struct Config {
     // pub ip: String,
     // pub port: u16,
     pub safe_keygen: bool,
-    pub tofnd_path: PathBuf,
+    // pub tofnd_path: PathBuf,
     pub password_method: PasswordMethod,
     #[cfg(feature = "malicious")]
     pub behaviours: Behaviours,

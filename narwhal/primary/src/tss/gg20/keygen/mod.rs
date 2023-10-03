@@ -128,6 +128,10 @@ impl Gg20Service {
                 // wait for keygen's result inside thread
                 let secret_key_share = gg20.execute_keygen(chans, &ctx, execute_span).await;
                 // send result to aggregator
+                info!(
+                    "Send secret key share to aggregator {:?}",
+                    &secret_key_share
+                );
                 let _ = aggregator_sender.send(secret_key_share);
             });
         }

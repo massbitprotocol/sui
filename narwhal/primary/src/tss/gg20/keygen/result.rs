@@ -10,8 +10,8 @@ use super::{
 };
 use crate::tss::{gg20::types::PartyInfo, kv_manager::store::Store, narwhal_types};
 use tofn::{gg20::keygen::SecretKeyShare, sdk::api::serialize};
+use tracing::info;
 use types::KeyReservation;
-
 // tonic cruft
 use tokio::sync::{
     mpsc,
@@ -186,6 +186,7 @@ impl Gg20Service {
 
         for aggregator in aggregator_receivers {
             let res = aggregator.await??;
+            info!("Kegen output {:?}", &res);
             keygen_outputs.push(res);
         }
 

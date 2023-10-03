@@ -509,15 +509,15 @@ impl TssParty {
 
         let keygen_init = self.tss_keygen.create_keygen_init();
         let uid = self.get_uid();
-        let tofnd_path = format!("/tss/.tofnd{}", self.authority.id().0);
-        info!("Init kvManager in dir {}", &tofnd_path);
+        // let tofnd_path = format!("/tss/.tofnd{}", self.authority.id().0);
+        // info!("Init kvManager in dir {}", &tofnd_path);
         let mut handles = Vec::new();
         let gg20_keygen_init = keygen_init.clone();
         let tss_store = self.tss_store.clone();
         let handle = tokio::spawn(async move {
             //Start gg20 service with kv_manager
-            let config = Config {
-                tofnd_path: tofnd_path.into(),
+            let config: Config = Config {
+                //tofnd_path: tofnd_path.into(),
                 password_method: PasswordMethod::NoPassword,
                 safe_keygen: true,
             };

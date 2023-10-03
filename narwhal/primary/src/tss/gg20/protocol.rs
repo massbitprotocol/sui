@@ -12,7 +12,7 @@ use super::ProtocolCommunication;
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 
 // logging
-use tracing::{debug, error, span, warn, Level, Span};
+use tracing::{debug, error, info, span, warn, Level, Span};
 
 // error handling
 use anyhow::anyhow;
@@ -131,7 +131,7 @@ async fn handle_incoming<F, K, P, const MAX_MSG_IN_LEN: usize>(
             "{}: stream closed by client before protocol has completed",
             round_count
         ));
-
+        info!("handle_incoming message {:?}", &traffic);
         // unpeel TrafficIn
         let traffic = match traffic {
             Ok(traffic_opt) => match traffic_opt {

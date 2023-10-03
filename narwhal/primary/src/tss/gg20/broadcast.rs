@@ -32,7 +32,7 @@ pub(super) async fn broadcast_messages_channel(
     loop {
         // read message from stream
         if let Some(msg_data) = rx_message_in.recv().await {
-            info!("Received message from grpc_stream");
+            info!("Received message from anemo service");
             // check incoming message
             let traffic = match open_message_in(msg_data, span.clone()) {
                 RoutingStatus::Continue { traffic } => traffic,
@@ -42,6 +42,7 @@ pub(super) async fn broadcast_messages_channel(
 
             // send the message to all channels
             for out_channel in &mut out_internal_channels {
+                info!("Send receiver message to internal_channels");
                 let _ = out_channel.send(Some(traffic.clone()));
             }
         }

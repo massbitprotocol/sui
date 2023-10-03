@@ -66,8 +66,6 @@ impl Gg20Service {
 
         let res = protocol_result
             .map_err(|err| anyhow!("Keygen was not completed due to error: {}", err))?;
-
-        info!("Keygen completed");
         Ok(res)
     }
 }
