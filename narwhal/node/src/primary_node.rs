@@ -12,7 +12,6 @@ use consensus::Consensus;
 use crypto::{KeyPair, NetworkKeyPair, PublicKey};
 use executor::{get_restored_consensus_output, ExecutionState, Executor, SubscriberResult};
 use fastcrypto::traits::{KeyPair as _, VerifyingKey};
-use futures::channel::mpsc::UnboundedSender;
 use mysten_metrics::metered_channel;
 use mysten_metrics::{RegistryID, RegistryService};
 use network::client::NetworkClient;
@@ -22,8 +21,7 @@ use std::sync::Arc;
 use std::time::Instant;
 use storage::NodeStorage;
 use sui_protocol_config::ProtocolConfig;
-use tokio::sync::mpsc::Receiver;
-use tokio::sync::mpsc::UnboundedReceiver;
+use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 use tokio::sync::{watch, RwLock};
 use tokio::task::JoinHandle;
 use tracing::{debug, info, instrument};
@@ -81,6 +79,7 @@ impl PrimaryNodeInner {
         // The state used by the client to execute transactions.
         execution_state: Arc<State>,
         rx_external_message: UnboundedReceiver<ExternalMessage>,
+        tx_scalar_trans: UnboundedSender<Vec<ScalarEventTransaction>>,
     ) -> Result<(), NodeError>
     where
         State: ExecutionState + Send + Sync + 'static,
@@ -112,6 +111,7 @@ impl PrimaryNodeInner {
             &registry,
             &mut tx_shutdown,
             rx_external_message,
+            tx_scalar_trans,
         )
         .await?;
 
@@ -218,6 +218,7 @@ impl PrimaryNodeInner {
         // The channel to send the shutdown signal
         tx_shutdown: &mut PreSubscribedBroadcastSender,
         rx_external_message: UnboundedReceiver<ExternalMessage>,
+        tx_scalar_trans: UnboundedSender<Vec<ScalarEventTransaction>>,
     ) -> SubscriberResult<Vec<JoinHandle<()>>>
     where
         State: ExecutionState + Send + Sync + 'static,
@@ -320,6 +321,7 @@ impl PrimaryNodeInner {
             registry,
             leader_schedule,
             rx_external_message,
+            tx_scalar_trans,
         );
         handles.extend(primary_handles);
 
@@ -469,6 +471,7 @@ impl PrimaryNode {
         // The state used by the client to execute transactions.
         execution_state: Arc<State>,
         rx_external_message: UnboundedReceiver<ExternalMessage>,
+        tx_scalar_trans: UnboundedSender<Vec<ScalarEventTransaction>>,
     ) -> Result<(), NodeError>
     where
         State: ExecutionState + Send + Sync + 'static,
@@ -486,6 +489,7 @@ impl PrimaryNode {
                 store,
                 execution_state,
                 rx_external_message,
+                tx_scalar_trans,
             )
             .await
     }

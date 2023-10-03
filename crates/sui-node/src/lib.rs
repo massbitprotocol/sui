@@ -857,7 +857,7 @@ impl SuiNode {
             authority_names_to_hostnames,
             committee,
             state.metrics.clone(),
-            tx_scalar_trans,
+            tx_scalar_trans.clone(),
         ));
 
         let transactions_addr = &config
@@ -878,6 +878,8 @@ impl SuiNode {
                     state.transaction_manager().clone(),
                     sui_tx_validator_metrics.clone(),
                 ),
+                //For transfer update smartcontract private key after keygen
+                tx_scalar_trans,
                 rx_scalar_trans,
             )
             .await;

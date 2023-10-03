@@ -62,7 +62,10 @@ use storage::{
     VoteDigestStore,
 };
 use sui_protocol_config::ProtocolConfig;
-use tokio::sync::{mpsc::UnboundedReceiver, RwLock};
+use tokio::sync::{
+    mpsc::{UnboundedReceiver, UnboundedSender},
+    RwLock,
+};
 use tokio::{sync::watch, task::JoinHandle};
 use tokio::{
     sync::{mpsc, oneshot},
@@ -79,9 +82,10 @@ use types::{
     FetchCertificatesResponse, GetCertificatesRequest, GetCertificatesResponse, Header, HeaderAPI,
     MetadataAPI, PayloadAvailabilityRequest, PayloadAvailabilityResponse,
     PreSubscribedBroadcastSender, PrimaryToPrimary, PrimaryToPrimaryServer, RequestVerifyRequest,
-    RequestVerifyResponse, RequestVoteRequest, RequestVoteResponse, Round, SendCertificateRequest,
-    SendCertificateResponse, TssPeerServer, Vote, VoteInfoAPI, WorkerOthersBatchMessage,
-    WorkerOurBatchMessage, WorkerOwnBatchMessage, WorkerToPrimary, WorkerToPrimaryServer,
+    RequestVerifyResponse, RequestVoteRequest, RequestVoteResponse, Round, ScalarEventTransaction,
+    SendCertificateRequest, SendCertificateResponse, TssPeerServer, Vote, VoteInfoAPI,
+    WorkerOthersBatchMessage, WorkerOurBatchMessage, WorkerOwnBatchMessage, WorkerToPrimary,
+    WorkerToPrimaryServer,
 };
 
 #[cfg(any(test))]
@@ -126,6 +130,7 @@ impl Primary {
         registry: &Registry,
         leader_schedule: LeaderSchedule,
         rx_external_message: UnboundedReceiver<ExternalMessage>,
+        tx_scalar_trans: UnboundedSender<Vec<ScalarEventTransaction>>,
     ) -> Vec<JoinHandle<()>> {
         // Write the parameters to the logs.
         parameters.tracing();
@@ -510,6 +515,7 @@ impl Primary {
             rx_tss_sign,
             rx_tss_sign_init,
             tx_tss_sign_result,
+            tx_scalar_trans,
             tx_shutdown.subscribe(),
         );
         let scalar_event_handle = ScalarEventHandler::spawn(

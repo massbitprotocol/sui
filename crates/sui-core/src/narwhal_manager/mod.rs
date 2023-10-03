@@ -152,6 +152,7 @@ impl NarwhalManager {
         worker_cache: WorkerCache,
         execution_state: Arc<State>,
         tx_validator: TxValidator,
+        tx_scalar_trans: mpsc::UnboundedSender<Vec<ScalarEventTransaction>>,
         rx_scalar_trans: UnboundedReceiver<Vec<ScalarEventTransaction>>,
     ) where
         State: ExecutionState + Send + Sync + 'static,
@@ -190,6 +191,7 @@ impl NarwhalManager {
         let mut rx_scalar_transaction = Arc::new(Mutex::new(rx_scalar_trans));
         loop {
             let (tx_event, rx_event) = mpsc::unbounded_channel();
+            let tx_trans = tx_scalar_trans.clone();
             match self
                 .primary_node
                 .start(
@@ -202,6 +204,7 @@ impl NarwhalManager {
                     &store,
                     execution_state.clone(),
                     rx_event,
+                    tx_trans,
                 )
                 .await
             {

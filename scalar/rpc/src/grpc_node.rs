@@ -1,5 +1,6 @@
 use crate::message_out::KeygenResult;
 use crate::proto::abci::{ScalarAbciRequest, ScalarAbciResponse};
+use crate::scalar_abci_response::Message;
 use crate::scalar_abci_server::{ScalarAbci, ScalarAbciServer};
 
 use crate::{
@@ -401,9 +402,7 @@ impl ScalarAbci for GrpcService {
         info!("\tclient connected from: {:?}", req.remote_addr());
 
         // creating infinite stream with requested message
-        let repeat = std::iter::repeat(ScalarAbciResponse {
-            message: req.into_inner().payload,
-        });
+        let repeat = std::iter::repeat(ScalarAbciResponse { message: None });
         let mut stream = Box::pin(tokio_stream::iter(repeat).throttle(Duration::from_millis(200)));
 
         // spawn and channel are required if you want handle "disconnect" functionality
@@ -461,7 +460,10 @@ impl ScalarAbci for GrpcService {
                 info!("Consensus made transactions {:?}", &trans);
                 for event_trans in trans.into_iter() {
                     let json = serde_json::to_string(&event_trans).unwrap();
-                    let abci_response = ScalarAbciResponse { message: json };
+                    let message = Message::Tran(crate::ScalarOutTransaction { message: json });
+                    let abci_response = ScalarAbciResponse {
+                        message: Some(message),
+                    };
                     let _ = tx_abci_trans.send(Ok(abci_response)).await;
                 }
             }
@@ -479,10 +481,13 @@ impl ScalarAbci for GrpcService {
                         let external_message = ExternalMessage::new(message.clone().into_bytes());
                         let _ = tx_external_message.send(external_message);
                         let _ = tx_transaction.send(v.clone()).await;
-                        //client.send_transaction(v).await;
+
+                        let response_message = Message::Ark(crate::RequestArk {
+                            payload: message.clone(),
+                        });
                         let send_response = tx_abci
                             .send(Ok(ScalarAbciResponse {
-                                message: "Ark".to_string(),
+                                message: Some(response_message),
                             }))
                             .await;
                         if let Err(_err) = send_response {

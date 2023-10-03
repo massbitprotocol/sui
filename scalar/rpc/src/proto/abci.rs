@@ -1,3 +1,32 @@
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct CallContractRequest {
+    #[prost(string, tag = "1")]
+    pub sender: ::prost::alloc::string::String,
+    #[prost(string, tag = "2")]
+    pub destination_chain: ::prost::alloc::string::String,
+    #[prost(string, tag = "3")]
+    pub destination_contract_address: ::prost::alloc::string::String,
+    #[prost(bytes = "vec", tag = "4")]
+    pub payload_hash: ::prost::alloc::vec::Vec<u8>,
+    #[prost(bytes = "vec", tag = "5")]
+    pub payload: ::prost::alloc::vec::Vec<u8>,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct CallContractResponse {}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct RequestArk {
+    #[prost(string, tag = "1")]
+    pub payload: ::prost::alloc::string::String,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct ScalarOutTransaction {
+    #[prost(string, tag = "1")]
+    pub message: ::prost::alloc::string::String,
+}
 /// ScalarAbciRequest is the request for ScalarAbci.
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
@@ -9,8 +38,19 @@ pub struct ScalarAbciRequest {
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ScalarAbciResponse {
-    #[prost(string, tag = "1")]
-    pub message: ::prost::alloc::string::String,
+    #[prost(oneof = "scalar_abci_response::Message", tags = "1, 2")]
+    pub message: ::core::option::Option<scalar_abci_response::Message>,
+}
+/// Nested message and enum types in `ScalarAbciResponse`.
+pub mod scalar_abci_response {
+    #[allow(clippy::derive_partial_eq_without_eq)]
+    #[derive(Clone, PartialEq, ::prost::Oneof)]
+    pub enum Message {
+        #[prost(message, tag = "1")]
+        Ark(super::RequestArk),
+        #[prost(message, tag = "2")]
+        Tran(super::ScalarOutTransaction),
+    }
 }
 /// Generated client implementations.
 pub mod scalar_abci_client {

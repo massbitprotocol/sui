@@ -26,7 +26,6 @@ use tracing::{error, info, warn};
 use types::message_out::keygen_result::KeygenResultData;
 use types::message_out::sign_result::SignResultData;
 use types::message_out::SignResult;
-use types::MessageOut;
 use types::TssAnemoDeliveryMessage;
 use types::TssAnemoKeygenRequest;
 use types::TssAnemoSignRequest;
@@ -38,6 +37,7 @@ use types::{
 };
 use types::{gg20_client::Gg20Client, KeygenInit};
 use types::{ConditionalBroadcastReceiver, SignInit};
+use types::{MessageOut, ScalarEventTransaction};
 use uuid::Uuid;
 
 use crate::tss::tss_keygen;
@@ -51,6 +51,7 @@ pub struct TssParty {
     tx_keygen: UnboundedSender<MessageIn>,
     tx_sign: UnboundedSender<MessageIn>,
     tx_tss_sign_result: UnboundedSender<(SignInit, SignResult)>,
+    tx_scalar_trans: UnboundedSender<Vec<ScalarEventTransaction>>,
 }
 impl TssParty {
     pub fn new(
@@ -60,6 +61,7 @@ impl TssParty {
         tx_keygen: UnboundedSender<MessageIn>,
         tx_sign: UnboundedSender<MessageIn>,
         tx_tss_sign_result: UnboundedSender<(SignInit, SignResult)>,
+        tx_scalar_trans: UnboundedSender<Vec<ScalarEventTransaction>>,
     ) -> Self {
         Self {
             authority,
@@ -68,6 +70,7 @@ impl TssParty {
             tx_keygen,
             tx_sign,
             tx_tss_sign_result,
+            tx_scalar_trans,
         }
     }
     pub async fn create_tofnd_client(port: u16) -> Option<Gg20Client<Channel>> {
@@ -504,7 +507,7 @@ impl TssParty {
             self.network.clone(),
             self.tx_keygen.clone(),
         );
-        let mut tss_signer = TssSigner::new(
+        let tss_signer = TssSigner::new(
             self.authority.clone(),
             self.committee.clone(),
             self.network.clone(),
@@ -523,17 +526,23 @@ impl TssParty {
                     .await
                     .unwrap()
                     .into_inner();
-                let timer = tokio::time::sleep(Duration::from_millis(10));
-                tokio::pin!(timer);
                 tokio::select! {
                     _ = rx_shutdown.receiver.recv() => {
                         warn!("Node is shuting down");
                         shuting_down = true;
                     },
                     keygen_result = tss_keygen.keygen_execute(&mut keygen_server_outgoing) => match keygen_result {
-                        Ok(res) => {
-                            info!("Keygen result {:?}", &res);
+                        Ok(KeygenResult { keygen_result_data }) => {
                             //Todo: Send keygen result to Evm Relayer to update external public key
+                            match keygen_result_data {
+                                Some(KeygenResultData::Data(keygen_output)) => {
+                                    info!("Keygen output {:?}", &keygen_output);
+                                },
+                                Some(KeygenResultData::Criminals(criminals)) => {
+                                    warn!("Criminals {:?}", &criminals);
+                                },
+                                None => {},
+                            }
                             keygened = true;
                         },
                         Err(e) => {
@@ -541,35 +550,6 @@ impl TssParty {
 
                         },
                     }
-                    // msg_out = keygen_server_outgoing.message() =>  match msg_out {
-                    //     Ok(Some(msg)) => {
-                    //         match tss_keygen.handle_keygen_message(msg).await {
-                    //             Ok(Some(res)) => {
-                    //                 info!("Keygen result {:?}", &res);
-                    //                 break;
-                    //             },
-                    //             Ok(None) => {
-                    //                 info!("Continue keygen flow ...");
-                    //             },
-                    //             Err(e) => {
-                    //                 error!("Error {:?}", e);
-                    //                 break;
-                    //             },
-                    //         }
-                    //     },
-                    //     Ok(None) => {
-                    //         warn!(
-                    //             "party [{}] keygen execution was not completed due to abort",
-                    //             &uid
-                    //         );
-                    //         break;
-                    //     },
-                    //     Err(e) => {
-                    //         error!("Get message from tofnd's keygen server with error {:?}", e);
-                    //         break;
-                    //     },
-                    // },
-                    // _ = timer.as_mut() => {}
                 }
 
                 //Waiting for sign message
@@ -601,9 +581,7 @@ impl TssParty {
                                         error!("Sign error {:?}", e);
                                     },
                                 }
-                            },
-
-                            _ = timer.as_mut() => {}
+                            }
                         }
                     }
                 }
@@ -626,15 +604,17 @@ impl TssParty {
         rx_sign: UnboundedReceiver<MessageIn>,
         rx_tss_sign_init: UnboundedReceiver<SignInit>,
         tx_tss_sign_result: UnboundedSender<(SignInit, SignResult)>,
+        tx_scalar_trans: UnboundedSender<Vec<ScalarEventTransaction>>,
         rx_shutdown: ConditionalBroadcastReceiver,
     ) -> JoinHandle<()> {
-        let mut tss_party = TssParty::new(
+        let tss_party = TssParty::new(
             authority.clone(),
             committee.clone(),
             network.clone(),
             tx_keygen,
             tx_sign,
             tx_tss_sign_result,
+            tx_scalar_trans,
         );
         tss_party.run(rx_keygen, rx_sign, rx_tss_sign_init, rx_shutdown)
     }
