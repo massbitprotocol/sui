@@ -2,9 +2,10 @@
 
 use serde::{de::DeserializeOwned, Serialize};
 use tofn::sdk::api::{deserialize, serialize};
+use types::KeyReservation;
 
 use super::error::{InnerKvError::*, InnerKvResult};
-use super::types::{KeyReservation, DEFAULT_RESERVE};
+use super::types::DEFAULT_RESERVE;
 
 use crate::tss::encrypted_sled;
 
@@ -27,7 +28,7 @@ pub(super) fn handle_reserve(
     kv.insert(&key, DEFAULT_RESERVE)?;
 
     // return key reservation
-    Ok(KeyReservation { key })
+    Ok(key)
 }
 
 /// Deletes an unreserved key if it exists.

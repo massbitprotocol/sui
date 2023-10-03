@@ -4,14 +4,13 @@
 //!  2. all secret share data - data used to allow parties to participate to future Signs; stored in KvStore
 //!  3. all secret share recovery info - information used to allow client to issue secret share recovery in case of data loss; sent to client
 
-use tofn::{gg20::keygen::SecretKeyShare, sdk::api::serialize};
-use types::KeyReservation;
-
 use super::{
     types::{BytesVec, KeygenInitSanitized, TofnKeygenOutput, TofndKeygenOutput},
     Gg20Service,
 };
-use crate::tss::{gg20::types::PartyInfo, narwhal_types};
+use crate::tss::{gg20::types::PartyInfo, kv_manager::store::Store, narwhal_types};
+use tofn::{gg20::keygen::SecretKeyShare, sdk::api::serialize};
+use types::KeyReservation;
 
 // tonic cruft
 use tokio::sync::{
@@ -64,7 +63,8 @@ impl Gg20Service {
         );
 
         // try to put data inside kv store
-        self.put(&key_uid_reservation, kv_data)
+        self.kv()
+            .put(&key_uid_reservation, &kv_data)
             .await
             .map_err(|err| anyhow!(err))?;
 

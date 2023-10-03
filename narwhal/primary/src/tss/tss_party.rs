@@ -36,7 +36,6 @@ use types::{
 use types::{ConditionalBroadcastReceiver, SignInit};
 
 use crate::tss::encrypted_sled::PasswordMethod;
-use crate::tss::mnemonic::Cmd;
 use crate::tss::service::Gg20Service;
 use crate::tss::tss_keygen::TssKeyGenerator;
 use crate::tss::types::Config;
@@ -518,12 +517,12 @@ impl TssParty {
         let handle = tokio::spawn(async move {
             //Start gg20 service with kv_manager
             let config = Config {
-                mnemonic_cmd: Cmd::Create,
                 tofnd_path: tofnd_path.into(),
                 password_method: PasswordMethod::NoPassword,
                 safe_keygen: true,
             };
-            let gg20_service = Gg20Service::new(tss_store);
+            let gg20_service = Gg20Service::new(tss_store, true);
+            let _ = gg20_service.init_mnemonic().await;
             let _ = gg20_service
                 .keygen_init(gg20_keygen_init, rx_keygen, tx_message_out)
                 .await;

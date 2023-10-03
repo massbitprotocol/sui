@@ -47,7 +47,13 @@ impl TssStore {
         fail_point!("narwhal-store-after-write");
         result
     }
-
+    pub async fn exists(&self, key: &KeyReservation) -> Result<bool, TypedStoreError> {
+        self.store
+            .read()
+            .await
+            .get(key)
+            .map(|value| value.is_some())
+    }
     pub async fn remove_all(
         &self,
         keys: impl IntoIterator<Item = KeyReservation>,

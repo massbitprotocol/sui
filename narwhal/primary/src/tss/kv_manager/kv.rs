@@ -8,12 +8,13 @@ use super::{
     sled_bindings::{handle_delete, handle_exists, handle_get, handle_put, handle_reserve},
     types::{
         Command::{self, *},
-        KeyReservation, DEFAULT_KV_NAME, DEFAULT_KV_PATH,
+        DEFAULT_KV_NAME, DEFAULT_KV_PATH,
     },
 };
 use serde::{de::DeserializeOwned, Serialize};
 use std::{fmt::Debug, path::PathBuf};
 use tokio::sync::{mpsc, oneshot};
+use types::KeyReservation;
 
 // logging
 use tracing::{info, warn};
@@ -168,7 +169,7 @@ async fn kv_cmd_handler<V: 'static>(
                 }
             }
             UnreserveKey { reservation } => {
-                let _ = kv.remove(&reservation.key);
+                let _ = kv.remove(&reservation);
             }
             Put {
                 reservation,

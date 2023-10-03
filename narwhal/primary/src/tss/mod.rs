@@ -1,7 +1,7 @@
 mod encrypted_sled;
 mod gg20;
 mod kv_manager;
-mod mnemonic;
+pub(crate) mod mnemonic;
 // mod multisig;
 mod tss_keygen;
 mod tss_party;

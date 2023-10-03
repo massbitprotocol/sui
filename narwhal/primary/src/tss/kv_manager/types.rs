@@ -1,7 +1,7 @@
 //! useful types and default paths for the kv_manager
 
 use std::fmt::Debug;
-
+use types::KeyReservation;
 // default KV store names
 pub const DEFAULT_KV_NAME: &str = "kv";
 

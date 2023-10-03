@@ -76,14 +76,14 @@ impl Gg20Service {
         let mut aggregator_receivers = Vec::with_capacity(my_share_count);
 
         // computation of (party_keypair, party_zksetup) is intensive so we compute them here once
-        let secret_recovery_key = self.kv_manager.seed().await?;
+        let secret_recovery_key = self.kv().seed().await?;
         let session_nonce = keygen_init.new_key_uid.as_bytes();
 
         info!("Generating keypair for party {} ...", keygen_init.my_index);
 
         let party_id = TypedUsize::<KeygenPartyId>::from_usize(keygen_init.my_index);
 
-        let party_keygen_data = match self.cfg.safe_keygen {
+        let party_keygen_data = match self.kv().is_safe_keygen() {
             true => create_party_keypair_and_zksetup(party_id, &secret_recovery_key, session_nonce),
             false => create_party_keypair_and_zksetup_unsafe(
                 party_id,
@@ -181,14 +181,14 @@ impl Gg20Service {
         let mut aggregator_receivers = Vec::with_capacity(my_share_count);
 
         // computation of (party_keypair, party_zksetup) is intensive so we compute them here once
-        let secret_recovery_key = self.kv_manager.seed().await?;
+        let secret_recovery_key = self.kv().seed().await?;
         let session_nonce = keygen_init.new_key_uid.as_bytes();
 
         info!("Generating keypair for party {} ...", keygen_init.my_index);
 
         let party_id = TypedUsize::<KeygenPartyId>::from_usize(keygen_init.my_index);
 
-        let party_keygen_data = match self.cfg.safe_keygen {
+        let party_keygen_data = match self.kv().is_safe_keygen() {
             true => create_party_keypair_and_zksetup(party_id, &secret_recovery_key, session_nonce),
             false => create_party_keypair_and_zksetup_unsafe(
                 party_id,

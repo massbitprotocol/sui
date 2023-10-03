@@ -44,9 +44,9 @@ impl Gg20Service {
         };
         debug!("Hanle sign init key uid {:?}", &sign_init.key_uid);
         // try to get party info related to session id
-        let party_info: PartyInfo = match self.get::<PartyInfo>(&sign_init.key_uid).await {
+        let party_info: PartyInfo = match self.get_party_info(&sign_init.key_uid).await {
             Ok(value) => value,
-            _ => {
+            Err(err) => {
                 Self::send_kv_store_failure(out_stream)?;
                 let err = anyhow!("Unable to find session-id {} in kv store. Issuing share recovery and exit sign {:?}", sign_init.key_uid, err);
                 return Err(err);

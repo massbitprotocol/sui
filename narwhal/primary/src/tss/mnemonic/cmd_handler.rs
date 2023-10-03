@@ -10,7 +10,7 @@ use crate::tss::{
     gg20::types::{Entropy, Password}, // TODO: move from gg20::types
     kv_manager::{
         error::{InnerKvError, KvError},
-        KeyReservation, KvManager,
+        KvManager,
     },
 };
 use tofn::{
@@ -21,6 +21,7 @@ use tofn::{
 use rpassword::read_password;
 use std::convert::TryInto;
 use tracing::{error, info};
+use types::KeyReservation;
 
 // default key to store mnemonic
 const MNEMONIC_KEY: &str = "mnemonic";

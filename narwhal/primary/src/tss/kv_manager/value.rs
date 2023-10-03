@@ -1,5 +1,6 @@
 use std::{convert::TryFrom, path::PathBuf};
 use tofn::sdk::api::{deserialize, serialize};
+use types::KvValue;
 
 use crate::tss::{
     encrypted_sled::Password,
@@ -7,35 +8,29 @@ use crate::tss::{
     mnemonic::FileIo,
 };
 
-use super::{
-    error::{InnerKvError, KvResult},
-    kv::Kv,
-};
+use super::error::{InnerKvError, KvResult};
 
-/// Kv manager for grpc services
-#[derive(Clone)]
-pub struct KvManager {
-    kv: Kv<KvValue>,
-    io: FileIo,
-}
+// /// Kv manager for grpc services
+// #[derive(Clone)]
+// pub struct KvManager {
+//     kv: Kv<KvValue>,
+//     io: FileIo,
+// }
 
-impl KvManager {
-    pub fn new(root: PathBuf, password: Password) -> KvResult<Self> {
-        Ok(KvManager {
-            kv: Kv::<KvValue>::new(root.clone(), password)?,
-            io: FileIo::new(root),
-        })
-    }
-    pub fn kv(&self) -> &Kv<KvValue> {
-        &self.kv
-    }
-    pub fn io(&self) -> &FileIo {
-        &self.io
-    }
-}
-
-/// Value type stored in the kv-store
-type KvValue = Vec<u8>;
+// impl KvManager {
+//     pub fn new(root: PathBuf, password: Password) -> KvResult<Self> {
+//         Ok(KvManager {
+//             kv: Kv::<KvValue>::new(root.clone(), password)?,
+//             io: FileIo::new(root),
+//         })
+//     }
+//     pub fn kv(&self) -> &Kv<KvValue> {
+//         &self.kv
+//     }
+//     pub fn io(&self) -> &FileIo {
+//         &self.io
+//     }
+// }
 
 /// Create PartyInfo from KvValue
 impl TryFrom<KvValue> for PartyInfo {

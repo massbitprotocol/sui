@@ -6,10 +6,10 @@
 //!     [Cmd::Import]: Prompts user to give a new mnemonic, inserts it in the kv-store and exits; Fails if a mnemonic exists or if the provided string is not a valid bip39 mnemonic.
 //!     [Cmd::Export]: Writes the existing mnemonic to a file and exits; Succeeds when there is an existing mnemonic, fails otherwise.
 
-mod bip39_bindings;
-mod cmd_handler;
+pub mod bip39_bindings;
+// mod cmd_handler;
 mod file_io;
-mod results;
+pub(crate) mod results;
 
-pub use cmd_handler::Cmd;
+// pub use cmd_handler::Cmd;
 pub use file_io::FileIo;

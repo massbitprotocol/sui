@@ -8,7 +8,7 @@
 /// incorporated in other modules
 /// For more info, see discussion in https://github.com/axelarnetwork/tofnd/issues/28
 
-pub(super) mod bip39 {
+pub(crate) mod bip39 {
     #[derive(thiserror::Error, Debug)]
     pub enum Bip39Error {
         #[error("invalid entropy")]
@@ -34,7 +34,7 @@ pub(super) mod file_io {
     pub type FileIoResult<Success> = Result<Success, FileIoError>;
 }
 
-pub(super) mod mnemonic {
+pub(crate) mod mnemonic {
     #[derive(thiserror::Error, Debug)]
     pub enum InnerMnemonicError {
         #[error("File IO error: {0}")]

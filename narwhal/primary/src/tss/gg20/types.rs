@@ -1,7 +1,7 @@
 //! Helper structs and implementations for [crate::gg20].
 
 // zeroize Entropy and Password
-use crate::tss::{encrypted_sled::PasswordMethod, mnemonic::Cmd};
+use crate::tss::encrypted_sled::PasswordMethod;
 use std::path::PathBuf;
 use tracing::{info, span, Level, Span};
 use zeroize::Zeroize;
@@ -12,7 +12,6 @@ pub struct Config {
     // pub ip: String,
     // pub port: u16,
     pub safe_keygen: bool,
-    pub mnemonic_cmd: Cmd,
     pub tofnd_path: PathBuf,
     pub password_method: PasswordMethod,
     #[cfg(feature = "malicious")]

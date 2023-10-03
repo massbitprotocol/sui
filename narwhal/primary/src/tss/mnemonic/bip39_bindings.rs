@@ -15,19 +15,19 @@ use bip39::{Language, Mnemonic, Seed};
 const DEFAUT_LANG: Language = Language::English;
 
 /// create a new 24 word mnemonic
-pub(super) fn bip39_new_w24() -> Entropy {
+pub(crate) fn bip39_new_w24() -> Entropy {
     let mnemonic = Mnemonic::new(bip39::MnemonicType::Words24, DEFAUT_LANG);
     Entropy(mnemonic.entropy().to_owned())
 }
 
 /// create a [Mnemonic] from [Entropy]; takes ownership of entropy and zeroizes it before exit
-pub(super) fn bip39_from_entropy(entropy: Entropy) -> Bip39Result<Mnemonic> {
+pub(crate) fn bip39_from_entropy(entropy: Entropy) -> Bip39Result<Mnemonic> {
     // try to get mnemonic from entropy
     Mnemonic::from_entropy(&entropy.0, DEFAUT_LANG).map_err(|_| FromEntropy)
 }
 
 /// create an [Entropy] from [Mnemonic]; takes ownership of phrase and zeroizes it before exit
-pub(super) fn bip39_from_phrase(phrase: Password) -> Bip39Result<Entropy> {
+pub(crate) fn bip39_from_phrase(phrase: Password) -> Bip39Result<Entropy> {
     // matching feels better than map_err() here
     match Mnemonic::from_phrase(&phrase.0, DEFAUT_LANG) {
         Ok(mnemonic) => Ok(Entropy(mnemonic.entropy().to_owned())),
@@ -36,7 +36,7 @@ pub(super) fn bip39_from_phrase(phrase: Password) -> Bip39Result<Entropy> {
 }
 
 /// extract [Seed] from [Mnemonic]; takes ownership of entropy and password and zeroizes them before exit
-pub(super) fn bip39_seed(entropy: Entropy, password: Password) -> Bip39Result<Seed> {
+pub(crate) fn bip39_seed(entropy: Entropy, password: Password) -> Bip39Result<Seed> {
     // matching feels better than map_err() here
     match bip39_from_entropy(entropy) {
         Ok(mnemonic) => Ok(Seed::new(&mnemonic, &password.0)),
