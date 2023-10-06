@@ -25,7 +25,9 @@ use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 use tokio::sync::{watch, RwLock};
 use tokio::task::JoinHandle;
 use tracing::{debug, info, instrument};
-use types::{Certificate, ConditionalBroadcastReceiver, PreSubscribedBroadcastSender, Round};
+use types::{
+    Certificate, ConditionalBroadcastReceiver, KeygenOutput, PreSubscribedBroadcastSender, Round,
+};
 use types::{ExternalMessage, ScalarEventTransaction};
 struct PrimaryNodeInner {
     // The configuration parameters.
@@ -79,6 +81,7 @@ impl PrimaryNodeInner {
         // The state used by the client to execute transactions.
         execution_state: Arc<State>,
         rx_external_message: UnboundedReceiver<ExternalMessage>,
+        tx_keygen_result: UnboundedSender<KeygenOutput>,
         tx_scalar_trans: UnboundedSender<Vec<ScalarEventTransaction>>,
     ) -> Result<(), NodeError>
     where
@@ -111,6 +114,7 @@ impl PrimaryNodeInner {
             &registry,
             &mut tx_shutdown,
             rx_external_message,
+            tx_keygen_result,
             tx_scalar_trans,
         )
         .await?;
@@ -218,6 +222,7 @@ impl PrimaryNodeInner {
         // The channel to send the shutdown signal
         tx_shutdown: &mut PreSubscribedBroadcastSender,
         rx_external_message: UnboundedReceiver<ExternalMessage>,
+        tx_keygen_result: UnboundedSender<KeygenOutput>,
         tx_scalar_trans: UnboundedSender<Vec<ScalarEventTransaction>>,
     ) -> SubscriberResult<Vec<JoinHandle<()>>>
     where
@@ -321,6 +326,7 @@ impl PrimaryNodeInner {
             registry,
             leader_schedule,
             rx_external_message,
+            tx_keygen_result,
             tx_scalar_trans,
         );
         handles.extend(primary_handles);
@@ -471,6 +477,7 @@ impl PrimaryNode {
         // The state used by the client to execute transactions.
         execution_state: Arc<State>,
         rx_external_message: UnboundedReceiver<ExternalMessage>,
+        tx_keygen_result: UnboundedSender<KeygenOutput>,
         tx_scalar_trans: UnboundedSender<Vec<ScalarEventTransaction>>,
     ) -> Result<(), NodeError>
     where
@@ -489,6 +496,7 @@ impl PrimaryNode {
                 store,
                 execution_state,
                 rx_external_message,
+                tx_keygen_result,
                 tx_scalar_trans,
             )
             .await

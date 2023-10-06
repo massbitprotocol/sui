@@ -1,6 +1,4 @@
-use anemo::{types::request::IntoRequest, Request};
 use serde::{Deserialize, Serialize};
-use tracing::info;
 
 /// Used by workers to send a new batch.
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]

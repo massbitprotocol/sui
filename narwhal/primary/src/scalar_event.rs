@@ -105,6 +105,7 @@ impl ScalarEventHandler {
             round,
             committee.epoch(),
             digest.clone(),
+            msg,
             signature_service,
         )
         .await;
@@ -167,27 +168,36 @@ impl ScalarEventHandler {
             sign_init, signature
         );
         let mut trans_client = self.create_remote_client();
-        let transaction = ScalarEventTransaction {
-            payload: vec![],
-            signature: signature.clone(),
-        };
-        let serialized = bcs::to_bytes(&transaction).expect("Serializing transaction cannot fail");
-        // let tran_data = TransactionData::new(kind, sender, gas_payment, gas_budget, gas_price)
-        // let sender_signed_trans = SenderSignedData::new_from_sender_signature(tran_data);
-        // let consensus_trans = self.create_consensus_transaction(sender_signed_trans);
-        // Todo: serialized data here then deserialized into ConsensusTransaction
-        // let serialized =
-        //     bcs::to_bytes(&consensus_trans).expect("Serializing transaction cannot fail");
-        info!("EventTransaction serialized: {:?}", serialized.as_slice());
-        let request = TransactionProto {
-            //transaction: Bytes::from(epoch.to_be_bytes().to_vec()),
-            transaction: Bytes::from(serialized.clone()),
-        };
-        let result = trans_client.submit_transaction(request).await;
-        if result.is_ok() {
-            info!("ScalarEvent::AnemoClient submit_transaction successfully");
+        let digest = EventDigest::from(sign_init.message_to_sign.clone());
+        if let Ok(Some(EventVerify { message, .. })) = self.event_store.read(&digest).await {
+            let transaction = ScalarEventTransaction {
+                payload: message.message,
+                signature: signature.clone(),
+            };
+            let serialized =
+                bcs::to_bytes(&transaction).expect("Serializing transaction cannot fail");
+            // let tran_data = TransactionData::new(kind, sender, gas_payment, gas_budget, gas_price)
+            // let sender_signed_trans = SenderSignedData::new_from_sender_signature(tran_data);
+            // let consensus_trans = self.create_consensus_transaction(sender_signed_trans);
+            // Todo: serialized data here then deserialized into ConsensusTransaction
+            // let serialized =
+            //     bcs::to_bytes(&consensus_trans).expect("Serializing transaction cannot fail");
+            info!("EventTransaction serialized: {:?}", serialized.as_slice());
+            let request = TransactionProto {
+                //transaction: Bytes::from(epoch.to_be_bytes().to_vec()),
+                transaction: Bytes::from(serialized.clone()),
+            };
+            let result = trans_client.submit_transaction(request).await;
+            if result.is_ok() {
+                info!("ScalarEvent::AnemoClient submit_transaction successfully");
+            } else {
+                debug!("ScalarEvent::AnemoClient submit_transaction failed");
+            }
         } else {
-            debug!("ScalarEvent::AnemoClient submit_transaction failed");
+            warn!(
+                "Cannot find EventVerify with digest {:?} from EventStore",
+                &digest
+            );
         }
         Ok(())
     }

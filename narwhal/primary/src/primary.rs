@@ -80,7 +80,7 @@ use types::{
     scalar_event_server::ScalarEventServer,
     Certificate, CertificateAPI, CertificateDigest, ExternalMessage, FetchCertificatesRequest,
     FetchCertificatesResponse, GetCertificatesRequest, GetCertificatesResponse, Header, HeaderAPI,
-    MetadataAPI, PayloadAvailabilityRequest, PayloadAvailabilityResponse,
+    KeygenOutput, MetadataAPI, PayloadAvailabilityRequest, PayloadAvailabilityResponse,
     PreSubscribedBroadcastSender, PrimaryToPrimary, PrimaryToPrimaryServer, RequestVerifyRequest,
     RequestVerifyResponse, RequestVoteRequest, RequestVoteResponse, Round, ScalarEventTransaction,
     SendCertificateRequest, SendCertificateResponse, TssPeerServer, Vote, VoteInfoAPI,
@@ -130,6 +130,7 @@ impl Primary {
         registry: &Registry,
         leader_schedule: LeaderSchedule,
         rx_external_message: UnboundedReceiver<ExternalMessage>,
+        tx_keygen_result: UnboundedSender<KeygenOutput>,
         tx_scalar_trans: UnboundedSender<Vec<ScalarEventTransaction>>,
     ) -> Vec<JoinHandle<()>> {
         // Write the parameters to the logs.
@@ -514,6 +515,7 @@ impl Primary {
             tx_tss_sign,
             rx_tss_sign,
             rx_tss_sign_init,
+            tx_keygen_result,
             tx_tss_sign_result,
             tx_scalar_trans,
             tx_shutdown.subscribe(),

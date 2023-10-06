@@ -27,6 +27,12 @@ pub struct ScalarOutTransaction {
     #[prost(string, tag = "1")]
     pub message: ::prost::alloc::string::String,
 }
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct KeygenOutput {
+    #[prost(bytes = "vec", tag = "1")]
+    pub pub_key: ::prost::alloc::vec::Vec<u8>,
+}
 /// ScalarAbciRequest is the request for ScalarAbci.
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
@@ -38,7 +44,7 @@ pub struct ScalarAbciRequest {
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ScalarAbciResponse {
-    #[prost(oneof = "scalar_abci_response::Message", tags = "1, 2")]
+    #[prost(oneof = "scalar_abci_response::Message", tags = "1, 2, 3")]
     pub message: ::core::option::Option<scalar_abci_response::Message>,
 }
 /// Nested message and enum types in `ScalarAbciResponse`.
@@ -50,6 +56,8 @@ pub mod scalar_abci_response {
         Ark(super::RequestArk),
         #[prost(message, tag = "2")]
         Tran(super::ScalarOutTransaction),
+        #[prost(message, tag = "3")]
+        Keygen(super::KeygenOutput),
     }
 }
 /// Generated client implementations.

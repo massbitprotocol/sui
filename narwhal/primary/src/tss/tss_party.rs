@@ -1,8 +1,8 @@
-use super::TssSigner;
 use super::{create_tofnd_client, send};
+use super::{Multisig, TssSigner};
 use anemo::{Network, PeerId};
 use anyhow::anyhow;
-use config::{Authority, Committee};
+use config::{committee, Authority, Committee};
 use crypto::NetworkPublicKey;
 use futures::future::join_all;
 use k256::ecdsa::hazmat::VerifyPrimitive;
@@ -10,15 +10,9 @@ use k256::elliptic_curve::sec1::FromEncodedPoint;
 use k256::elliptic_curve::ScalarPrimitive;
 use k256::EncodedPoint;
 use k256::ProjectivePoint;
-use network::CancelOnDropHandler;
-use network::RetryConfig;
-use std::collections::VecDeque;
-use std::{net::Ipv4Addr, sync::Arc};
-use storage::TssStore;
+use std::net::Ipv4Addr;
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
-use tokio::sync::RwLock;
 use tokio::task::JoinHandle;
-use tokio::time::Duration;
 use tokio_stream::wrappers::UnboundedReceiverStream;
 use tonic::transport::Channel;
 use tonic::{Status, Streaming};
@@ -26,9 +20,6 @@ use tracing::{error, info, warn};
 use types::message_out::keygen_result::KeygenResultData;
 use types::message_out::sign_result::SignResultData;
 use types::message_out::SignResult;
-use types::TssAnemoDeliveryMessage;
-use types::TssAnemoKeygenRequest;
-use types::TssAnemoSignRequest;
 use types::TssPeerClient;
 use types::{
     gg20_client, message_in,
@@ -36,12 +27,14 @@ use types::{
     KeygenOutput, MessageIn, TrafficIn,
 };
 use types::{gg20_client::Gg20Client, KeygenInit};
+use types::{keygen_response, sign_response, TssAnemoKeygenRequest};
 use types::{ConditionalBroadcastReceiver, SignInit};
 use types::{MessageOut, ScalarEventTransaction};
-use uuid::Uuid;
+use types::{MultisigKeygenResponse, TssAnemoDeliveryMessage};
+use types::{MultisigSignResponse, TssAnemoSignRequest};
 
-use crate::tss::tss_keygen;
 use crate::tss::tss_keygen::TssKeyGenerator;
+use crate::tss::{create_multisig_client, tss_keygen};
 
 #[derive(Clone)]
 pub struct TssParty {
@@ -50,6 +43,7 @@ pub struct TssParty {
     network: Network,
     tx_keygen: UnboundedSender<MessageIn>,
     tx_sign: UnboundedSender<MessageIn>,
+    tx_tss_keygen_result: UnboundedSender<KeygenOutput>,
     tx_tss_sign_result: UnboundedSender<(SignInit, SignResult)>,
     tx_scalar_trans: UnboundedSender<Vec<ScalarEventTransaction>>,
 }
@@ -60,6 +54,7 @@ impl TssParty {
         network: Network,
         tx_keygen: UnboundedSender<MessageIn>,
         tx_sign: UnboundedSender<MessageIn>,
+        tx_tss_keygen_result: UnboundedSender<KeygenOutput>,
         tx_tss_sign_result: UnboundedSender<(SignInit, SignResult)>,
         tx_scalar_trans: UnboundedSender<Vec<ScalarEventTransaction>>,
     ) -> Self {
@@ -69,6 +64,7 @@ impl TssParty {
             network,
             tx_keygen,
             tx_sign,
+            tx_tss_keygen_result,
             tx_tss_sign_result,
             tx_scalar_trans,
         }
@@ -514,12 +510,66 @@ impl TssParty {
             self.tx_sign.clone(),
         );
         let tx_sign_result = self.tx_tss_sign_result.clone();
+        let tx_keygen_result = self.tx_tss_keygen_result.clone();
         let uid = self.get_uid();
-        let authority_id = self.authority.id().0;
+        // let authority = self.authority.clone();
+        // let committee = self.committee.clone();
+        // tokio::spawn(async move {
+        //     //Spawn multisig thread
+        //     let mut shuting_down = false;
+        //     let mut multisig = Multisig::new(authority, committee);
+        //     if let Ok(mut multisig_client) = create_multisig_client(port).await {
+        //         let keygen_request = multisig.create_keygen_request();
+        //         match multisig_client
+        //             .keygen(tonic::Request::new(keygen_request))
+        //             .await
+        //         {
+        //             Ok(res) => {
+        //                 let MultisigKeygenResponse { keygen_response } = res.into_inner();
+        //                 info!("Multisig keygen response {:?}", &keygen_response);
+        //                 if let Some(keygen_response::KeygenResponse::PubKey(pub_key)) =
+        //                     keygen_response
+        //                 {
+        //                     multisig.set_pub_key(pub_key)
+        //                 }
+        //             }
+        //             Err(err) => {
+        //                 info!("Multisig keygen error {:?}", &err);
+        //             }
+        //         }
+        //         loop {
+        //             tokio::select! {
+        //                 _ = rx_shutdown.receiver.recv() => {
+        //                     warn!("Node is shuting down");
+        //                     shuting_down = true;
+        //                     break;
+        //                 },
+        //                 Some(sign_init) = rx_sign_init.recv() => {
+        //                     info!("Received sign init {:?}", &sign_init);
+        //                     if let Ok(sign_request) = multisig.create_sign_request(sign_init.message_to_sign.clone()) {
+        //                         match multisig_client.sign(tonic::Request::new(sign_request)).await {
+        //                             Ok(res) =>  {
+        //                                 let MultisigSignResponse { sign_response }  = res.into_inner();
+        //                                 info!("Multisig keygen response {:?}", &sign_response);
+        //                                 if let Some(sign_response::SignResponse::Signature(signature)) = sign_response {
+        //                                     info!("Signature {:?} with len {:?}", &signature, signature.len());
+        //                                 }
+        //                             },
+        //                             Err(err) => {
+        //                                 info!("Multisig sign error {:?}", &err);
+        //                             },
+        //                         }
+        //                     }
+        //                 }
+        //             }
+        //         }
+        //     }
+        // });
         tokio::spawn(async move {
             info!("Init TssParty node, starting keygen process");
             let mut shuting_down = false;
             let mut keygened = false;
+
             if let Ok(mut client) = create_tofnd_client(port).await {
                 let mut keygen_server_outgoing = client
                     .keygen(tonic::Request::new(UnboundedReceiverStream::new(rx_keygen)))
@@ -533,10 +583,11 @@ impl TssParty {
                     },
                     keygen_result = tss_keygen.keygen_execute(&mut keygen_server_outgoing) => match keygen_result {
                         Ok(KeygenResult { keygen_result_data }) => {
-                            //Todo: Send keygen result to Evm Relayer to update external public key
                             match keygen_result_data {
                                 Some(KeygenResultData::Data(keygen_output)) => {
                                     info!("Keygen output {:?}", &keygen_output);
+                                    let _ = tx_keygen_result.send(keygen_output);
+                                    //Todo: Send keygen result to Evm Relayer to update external public key
                                 },
                                 Some(KeygenResultData::Criminals(criminals)) => {
                                     warn!("Criminals {:?}", &criminals);
@@ -575,7 +626,7 @@ impl TssParty {
                                 match tss_signer.sign_execute(&mut sign_server_outgoing, &sign_init).await {
                                     Ok(sign_result) => {
                                         info!("Sign result {:?}", &sign_result);
-                                        tx_sign_result.send((sign_init, sign_result));
+                                        let _ = tx_sign_result.send((sign_init, sign_result));
                                     },
                                     Err(e) => {
                                         error!("Sign error {:?}", e);
@@ -603,6 +654,7 @@ impl TssParty {
         tx_sign: UnboundedSender<MessageIn>,
         rx_sign: UnboundedReceiver<MessageIn>,
         rx_tss_sign_init: UnboundedReceiver<SignInit>,
+        tx_tss_keygen_result: UnboundedSender<KeygenOutput>,
         tx_tss_sign_result: UnboundedSender<(SignInit, SignResult)>,
         tx_scalar_trans: UnboundedSender<Vec<ScalarEventTransaction>>,
         rx_shutdown: ConditionalBroadcastReceiver,
@@ -613,6 +665,7 @@ impl TssParty {
             network.clone(),
             tx_keygen,
             tx_sign,
+            tx_tss_keygen_result,
             tx_tss_sign_result,
             tx_scalar_trans,
         );

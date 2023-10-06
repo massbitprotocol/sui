@@ -4,8 +4,8 @@ use crate::scalar_abci_response::Message;
 use crate::scalar_abci_server::{ScalarAbci, ScalarAbciServer};
 
 use crate::{
-    gg20_client, message_in, AnemoDeliverer, Deliverer, KeygenInit, MessageIn, TssParty, NAMESPACE,
-    NUM_SHUTDOWN_RECEIVERS,
+    gg20_client, message_in, AnemoDeliverer, Deliverer, KeygenInit, KeygenOutput, MessageIn,
+    TssParty, NAMESPACE, NUM_SHUTDOWN_RECEIVERS,
 };
 use anemo::PeerId;
 use arc_swap::Guard;
@@ -70,6 +70,7 @@ impl GrpcNodeInner {
         // The state used by the client to execute transactions.
         execution_state: Arc<State>,
         tx_external_message: mpsc::UnboundedSender<ExternalMessage>,
+        rx_keygen_result: Arc<Mutex<UnboundedReceiver<narwhal_types::KeygenOutput>>>,
         rx_scalar_transaction: Arc<Mutex<UnboundedReceiver<Vec<ScalarEventTransaction>>>>,
     ) -> Result<(), NodeError>
     where
@@ -98,6 +99,7 @@ impl GrpcNodeInner {
             execution_state.clone(),
             &registry.as_ref().unwrap(),
             tx_external_message,
+            rx_keygen_result,
             rx_scalar_transaction,
             &mut tx_shutdown,
         )
@@ -252,6 +254,7 @@ impl GrpcNodeInner {
         // A prometheus exporter Registry to use for the metrics
         registry: &Registry,
         tx_external_message: mpsc::UnboundedSender<ExternalMessage>,
+        rx_keygen_result: Arc<Mutex<UnboundedReceiver<narwhal_types::KeygenOutput>>>,
         rx_scalar_transaction: Arc<Mutex<UnboundedReceiver<Vec<ScalarEventTransaction>>>>,
         // The channel to send the shutdown signal
         tx_shutdown: &mut PreSubscribedBroadcastSender,
@@ -286,6 +289,7 @@ impl GrpcNodeInner {
         let narwhal_client = Arc::new(AnemoClient::new(committee, worker_cache, name));
         let abci_service = GrpcService {
             tx_external_message,
+            rx_keygen_result,
             rx_scalar_transaction,
             tx_transaction,
             narwhal_client: narwhal_client.clone(),
@@ -378,6 +382,7 @@ impl GrpcNodeInner {
 #[derive(Debug)]
 pub struct GrpcService {
     tx_external_message: mpsc::UnboundedSender<ExternalMessage>,
+    rx_keygen_result: Arc<Mutex<UnboundedReceiver<narwhal_types::KeygenOutput>>>,
     rx_scalar_transaction: Arc<Mutex<UnboundedReceiver<Vec<ScalarEventTransaction>>>>,
     tx_transaction: mpsc::Sender<ScalarAbciRequest>,
     narwhal_client: Arc<AnemoClient>,
@@ -455,6 +460,7 @@ impl ScalarAbci for GrpcService {
         let mut handles = Vec::new();
         let rx_trans = self.rx_scalar_transaction.clone();
         let tx_abci_trans = tx_abci.clone();
+        //Handle consensus transaction received from Narwhal & Bullshark
         let handle = tokio::spawn(async move {
             while let Some(trans) = rx_trans.lock().await.recv().await {
                 info!("Consensus made transactions {:?}", &trans);
@@ -466,6 +472,22 @@ impl ScalarAbci for GrpcService {
                     };
                     let _ = tx_abci_trans.send(Ok(abci_response)).await;
                 }
+            }
+        });
+        handles.push(handle);
+        //Handle Keygen result message from Tss component
+        let rx_keygen = self.rx_keygen_result.clone();
+        let tx_abci_trans = tx_abci.clone();
+        let handle = tokio::spawn(async move {
+            while let Some(keygen_output) = rx_keygen.lock().await.recv().await {
+                info!("Keygen result {:?}", &keygen_output);
+                let message = Message::Keygen(crate::KeygenOutput {
+                    pub_key: keygen_output.pub_key.clone(),
+                });
+                let abci_response = ScalarAbciResponse {
+                    message: Some(message),
+                };
+                let _ = tx_abci_trans.send(Ok(abci_response)).await;
             }
         });
         handles.push(handle);
@@ -615,6 +637,7 @@ impl GrpcNode {
         // The state used by the client to execute transactions.
         execution_state: Arc<State>,
         tx_external_message: mpsc::UnboundedSender<ExternalMessage>,
+        rx_keygen_result: Arc<Mutex<UnboundedReceiver<narwhal_types::KeygenOutput>>>,
         rx_scalar_transaction: Arc<Mutex<UnboundedReceiver<Vec<ScalarEventTransaction>>>>,
     ) -> Result<(), NodeError>
     where
@@ -631,6 +654,7 @@ impl GrpcNode {
                 client,
                 execution_state,
                 tx_external_message,
+                rx_keygen_result,
                 rx_scalar_transaction,
             )
             .await

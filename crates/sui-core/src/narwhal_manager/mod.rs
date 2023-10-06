@@ -187,8 +187,12 @@ impl NarwhalManager {
         const MAX_PRIMARY_RETRIES: u32 = 2;
         let mut primary_retries = 0;
         let mut tx_external_message = None;
-        //let (tx_scalar_trans, rx_scalar_trans) = mpsc::unbounded_channel();
+        //Channels for transfer signed scalar transaction from Primary node to Grpc server, then send to EVM Relayer
         let mut rx_scalar_transaction = Arc::new(Mutex::new(rx_scalar_trans));
+        //Channel for transfer keygen result from Tss component (Currently in Primary node) to Grpc server then send to Relayer
+        let (tx_keygen_result, rx_keygen_result) = mpsc::unbounded_channel();
+        let rx_keygen_result = Arc::new(Mutex::new(rx_keygen_result));
+
         loop {
             let (tx_event, rx_event) = mpsc::unbounded_channel();
             let tx_trans = tx_scalar_trans.clone();
@@ -204,6 +208,7 @@ impl NarwhalManager {
                     &store,
                     execution_state.clone(),
                     rx_event,
+                    tx_keygen_result.clone(),
                     tx_trans,
                 )
                 .await
@@ -304,6 +309,7 @@ impl NarwhalManager {
                     network_client.clone(),
                     execution_state.clone(),
                     tx_external_message.as_ref().unwrap().clone(),
+                    rx_keygen_result.clone(),
                     rx_scalar_transaction.clone(),
                 )
                 .await

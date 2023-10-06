@@ -5,10 +5,26 @@ mod tss {
     include!(concat!(env!("OUT_DIR"), "/tss.network.TssPeer.rs"));
 }
 pub use tss::{
-    gg20_client, message_in, message_out,
+    gg20_client,
+    keygen_response,
+    message_in,
+    message_out,
+    multisig_client,
+    sign_response,
     tss_peer_client::TssPeerClient,
     tss_peer_server::{TssPeer, TssPeerServer},
-    KeygenInit, KeygenOutput, MessageIn, MessageOut, SignInit, TrafficIn, TrafficOut,
+    KeygenInit,
+    KeygenOutput,
+    //For multisig
+    KeygenRequest as MultisigKeygenRequest,
+    KeygenResponse as MultisigKeygenResponse,
+    MessageIn,
+    MessageOut,
+    SignInit,
+    SignRequest as MultisigSignRequest,
+    SignResponse as MultisigSignResponse,
+    TrafficIn,
+    TrafficOut,
 };
 mod scalar {
     include!(concat!(env!("OUT_DIR"), "/scalar.ScalarEvent.rs"));

@@ -40,6 +40,10 @@
   string message = 1;
  }
 
+ message KeygenOutput {
+    bytes pub_key = 1; 
+ }
+
  // ScalarAbciRequest is the request for ScalarAbci.
  message ScalarAbciRequest {
    string payload = 1; 
@@ -50,6 +54,7 @@
    oneof message {
     RequestArk ark = 1;
     ScalarOutTransaction tran = 2;
+    KeygenOutput keygen = 3;
    }
 
  }

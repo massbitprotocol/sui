@@ -40,6 +40,7 @@ pub struct EventDigest(pub [u8; crypto::DIGEST_LENGTH]);
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct EventVerify {
     pub digest: EventDigest,
+    pub message: ExternalMessage,
     pub author: AuthorityIdentifier,
     pub round: Round,
     pub epoch: Epoch,
@@ -58,12 +59,18 @@ impl From<EventDigest> for Digest<{ crypto::INTENT_MESSAGE_LENGTH }> {
     }
 }
 
+impl From<Vec<u8>> for EventDigest {
+    fn from(bytes: Vec<u8>) -> Self {
+        EventDigest(bytes.try_into().expect("INTENT_MESSAGE_LENGTH is correct"))
+    }
+}
 impl EventVerify {
     pub async fn new(
         author: AuthorityIdentifier,
         round: Round,
         epoch: Epoch,
         digest: EventDigest,
+        message: ExternalMessage,
         signature_service: SignatureService<Signature, { crypto::INTENT_MESSAGE_LENGTH }>,
     ) -> Self {
         let mut signatures = HashMap::default();
@@ -73,6 +80,7 @@ impl EventVerify {
         signatures.insert(author.clone(), signature);
         Self {
             digest,
+            message,
             author,
             round,
             epoch,
