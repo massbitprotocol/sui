@@ -33,7 +33,7 @@
  }
 
  message RequestArk {
-  string payload = 1;
+  bytes payload = 1;
  }
 
  message ScalarOutTransaction {
@@ -46,7 +46,7 @@
 
  // ScalarAbciRequest is the request for ScalarAbci.
  message ScalarAbciRequest {
-   string payload = 1; 
+   bytes payload = 1; 
  }
 
  // ScalarAbciResponse is the response for ScalarAbci.

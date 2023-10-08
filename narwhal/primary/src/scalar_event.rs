@@ -128,7 +128,7 @@ impl ScalarEventHandler {
         if let Some(sign_result_data) = sign_result.sign_result_data {
             match sign_result_data {
                 SignResultData::Signature(sig) => {
-                    self.submit_event_transaction(&sign_init, sig.clone()).await;
+                    let _ = self.submit_event_transaction(&sign_init, sig.clone()).await;
                 }
                 SignResultData::Criminals(c) => {
                     warn!("Criminals {:?}", c);

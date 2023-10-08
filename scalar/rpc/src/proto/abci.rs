@@ -18,8 +18,8 @@ pub struct CallContractResponse {}
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct RequestArk {
-    #[prost(string, tag = "1")]
-    pub payload: ::prost::alloc::string::String,
+    #[prost(bytes = "vec", tag = "1")]
+    pub payload: ::prost::alloc::vec::Vec<u8>,
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
@@ -37,8 +37,8 @@ pub struct KeygenOutput {
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ScalarAbciRequest {
-    #[prost(string, tag = "1")]
-    pub payload: ::prost::alloc::string::String,
+    #[prost(bytes = "vec", tag = "1")]
+    pub payload: ::prost::alloc::vec::Vec<u8>,
 }
 /// ScalarAbciResponse is the response for ScalarAbci.
 #[allow(clippy::derive_partial_eq_without_eq)]

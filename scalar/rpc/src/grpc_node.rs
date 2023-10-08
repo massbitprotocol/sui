@@ -500,7 +500,7 @@ impl ScalarAbci for GrpcService {
                             "ScalarAbciServer::receiver message {:?}, then send to narwhal via tx_external_message",
                             &message
                         );
-                        let external_message = ExternalMessage::new(message.clone().into_bytes());
+                        let external_message = ExternalMessage::new(message.clone());
                         let _ = tx_external_message.send(external_message);
                         let _ = tx_transaction.send(v.clone()).await;
 
@@ -579,7 +579,7 @@ impl AnemoClient {
         LocalNarwhalClient::get_global(&target).unwrap().load()
     }
     async fn send_transaction(&self, trans: ScalarAbciRequest) {
-        println!("Call anemo client send_transaction {}", &trans.payload);
+        info!("Call anemo client send_transaction",);
         //Remote client
         let mut remote_client = self.create_remote_client();
         let local_client = self.create_local_client();
