@@ -1064,7 +1064,7 @@ impl PrimaryReceiverHandler {
             }
         } else {
             info!("Stored event notfound, write peer's event into the storage");
-            self.event_store.write(event).await;
+            let _ = self.event_store.write(event).await;
         }
         // Get event from event store
         //

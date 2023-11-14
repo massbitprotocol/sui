@@ -1,21 +1,15 @@
 use crate::Round;
 use config::{AuthorityIdentifier, Epoch};
 use crypto::{to_intent_message, Signature};
-use ethers::{
-    types::{Block, H256},
-    utils::keccak256,
-};
+use ethers::utils::keccak256;
 use fastcrypto::{hash::Digest, signature_service::SignatureService};
 use serde::{Deserialize, Serialize};
-use std::{
-    collections::{hash_map::DefaultHasher, HashMap},
-    fmt,
-    hash::Hasher,
-};
-
+use std::collections::HashMap;
+pub const ETH_PREFIX_HASH: &str = "\x19Ethereum Signed Message:\n32";
 //For simplicity all message convert to string using serde_json
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ExternalMessage {
+    //payload data serialized from first param for smartcontract AxelarGateway::execute
     pub message: Vec<u8>,
 }
 
@@ -24,9 +18,17 @@ impl ExternalMessage {
         //let _hash = block.hash.unwrap().0.clone();
         Self { message }
     }
+    /*
+     * Message for signing
+     * keccak256(abi.encodePacked('\x19Ethereum Signed Message:\n32', keccak256(message)))
+     */
+
     pub fn get_digest(&self) -> [u8; crypto::DIGEST_LENGTH] {
-        let hash = keccak256(self.message.as_slice());
-        hash
+        let hash = keccak256(&self.message);
+        let mut eth_message = Vec::with_capacity(ETH_PREFIX_HASH.len() + hash.len());
+        eth_message.extend_from_slice(ETH_PREFIX_HASH.as_bytes());
+        eth_message.extend_from_slice(&hash);
+        keccak256(&eth_message)
     }
 }
 

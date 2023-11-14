@@ -29,7 +29,7 @@ tss() {
 validator() {
     # /usr/local/bin/sui-test-validator --config-path /opt/sui/config/validator.yaml
     /usr/local/bin/sui-test-validator \
-        --epoch-duration-ms 300000 \
+        --epoch-duration-ms 3600000 \
         --fullnode-rpc-port 9000 \
         --faucet-port 9123 \
         --indexer-rpc-port 9124

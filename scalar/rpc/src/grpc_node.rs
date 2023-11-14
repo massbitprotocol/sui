@@ -286,8 +286,9 @@ impl GrpcNodeInner {
             + authority.id().0;
         let grpc_addr = format!("{}:{}", grpc_host, grpc_port);
         info!("GRPC address {}", &grpc_addr);
-        let narwhal_client = Arc::new(AnemoClient::new(committee, worker_cache, name));
+        let narwhal_client = Arc::new(AnemoClient::new(committee.clone(), worker_cache, name));
         let abci_service = GrpcService {
+            committee,
             tx_external_message,
             rx_keygen_result,
             rx_scalar_transaction,
@@ -381,6 +382,7 @@ impl GrpcNodeInner {
 
 #[derive(Debug)]
 pub struct GrpcService {
+    committee: Committee,
     tx_external_message: mpsc::UnboundedSender<ExternalMessage>,
     rx_keygen_result: Arc<Mutex<UnboundedReceiver<narwhal_types::KeygenOutput>>>,
     rx_scalar_transaction: Arc<Mutex<UnboundedReceiver<Vec<ScalarEventTransaction>>>>,
@@ -478,10 +480,13 @@ impl ScalarAbci for GrpcService {
         //Handle Keygen result message from Tss component
         let rx_keygen = self.rx_keygen_result.clone();
         let tx_abci_trans = tx_abci.clone();
+        let committee = self.committee.clone();
         let handle = tokio::spawn(async move {
+            let epoch = committee.epoch();
             while let Some(keygen_output) = rx_keygen.lock().await.recv().await {
                 info!("Keygen result {:?}", &keygen_output);
                 let message = Message::Keygen(crate::KeygenOutput {
+                    epoch,
                     pub_key: keygen_output.pub_key.clone(),
                 });
                 let abci_response = ScalarAbciResponse {

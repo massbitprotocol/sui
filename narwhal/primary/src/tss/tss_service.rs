@@ -56,7 +56,7 @@ impl TssPeer for TssPeerService {
             })),
         };
         if let Err(e) = self.tx_sign.send(msg_in) {
-            warn!("gRpc TssSend error {:?}", e);
+            warn!("Channel TssSend sign message error {:?}", e);
         }
         let reply = TssAnemoSignResponse {
             message: format!(

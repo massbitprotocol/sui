@@ -118,11 +118,14 @@ impl ScalarEventHandler {
                 }
             }
         } else {
-            info!("Write event into node's event_store {:?}", &event);
-            self.event_store.write(&event);
+            info!(
+                "Event {:?} not found in storage. Put it into the node's event_store",
+                &event
+            );
+            let _ = self.event_store.write(&event).await;
         }
         let network = self.network.clone();
-        Self::propose_event(authority, committee, event, network).await;
+        let _ = Self::propose_event(authority, committee, event, network).await;
     }
     async fn handle_sign_result(&self, sign_init: SignInit, sign_result: SignResult) {
         if let Some(sign_result_data) = sign_result.sign_result_data {
@@ -386,9 +389,9 @@ impl ScalarEventService {
         request: anemo::Request<RequestVerifyRequest>,
     ) -> DagResult<RequestVerifyResponse> {
         let event = &request.body().event;
-        let event_digest = event.digest();
-        if let Some(mut stored_event) = self.event_store.read(&event_digest).await? {
-            info!("Stored event {:?}", &stored_event);
+        //info!("Received request_event_verify {:?}", event);
+        if let Some(mut stored_event) = self.event_store.read(&event.digest).await? {
+            info!("Found stored event {:?}", &stored_event);
             for (authoriry, signature) in event.signatures.iter() {
                 stored_event.add_signature(authoriry, signature.clone());
             }
@@ -418,13 +421,12 @@ impl ScalarEventService {
                 }
             }
         } else {
-            info!("Stored event notfound, write peer's event into the storage");
-            self.event_store.write(event).await;
+            info!(
+                "Event with digest {:?} not found, write peer's event into the storage",
+                &event.digest
+            );
+            let _ = self.event_store.write(event).await;
         }
-        // Get event from event store
-        //
-        info!("Received request_event_verify {:?}", event);
-
         Ok(RequestVerifyResponse {
             event: Some(event.clone()),
         })

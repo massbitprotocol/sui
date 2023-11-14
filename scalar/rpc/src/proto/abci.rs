@@ -30,7 +30,9 @@ pub struct ScalarOutTransaction {
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct KeygenOutput {
-    #[prost(bytes = "vec", tag = "1")]
+    #[prost(uint64, tag = "1")]
+    pub epoch: u64,
+    #[prost(bytes = "vec", tag = "2")]
     pub pub_key: ::prost::alloc::vec::Vec<u8>,
 }
 /// ScalarAbciRequest is the request for ScalarAbci.

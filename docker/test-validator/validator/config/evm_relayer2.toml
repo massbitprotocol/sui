@@ -1,34 +1,34 @@
 [[relayer_evm]]
 name = "Ethereum"
-call_contract = "0xe432150cce91c13a887f7D836923d5597adD8E31"
+call_contract = "0xDC2efB75b67528C9C04fdFA6CB2795f12bC1D72d"
 rpc_addr = "https://mainnet.infura.io/ws/v3/c60b0bb42f8a4c6481ecd229eddaca27"
 ws_addr = "wss://mainnet.infura.io/ws/v3/c60b0bb42f8a4c6481ecd229eddaca27"
 start_with_bridge = false
 
 [[relayer_evm]]
 name = "Goerli"
-call_contract = "0x10A69f82Ed4E8E058b399f8aA5216Aa2602C7a52"
+call_contract = "0xDC2efB75b67528C9C04fdFA6CB2795f12bC1D72d"
 rpc_addr = "https://eth-goerli.g.alchemy.com/v2/DpCscOiv_evEPscGYARI3cOVeJ59CRo8"
 ws_addr = "wss://eth-goerli.g.alchemy.com/v2/DpCscOiv_evEPscGYARI3cOVeJ59CRo8"
 start_with_bridge = true
 
 [[relayer_evm]]
 name = "Fuji"
-call_contract = "0x10A69f82Ed4E8E058b399f8aA5216Aa2602C7a52"
+call_contract = "0xDC2efB75b67528C9C04fdFA6CB2795f12bC1D72d"
 rpc_addr = "https://api.avax-test.network/ext/bc/C/rpc"
 ws_addr = "wss://api.avax-test.network/ext/bc/C/rpc"
 start_with_bridge = false
 
 [[relayer_evm]]
 name = "Avalanche"
-call_contract = "0x10A69f82Ed4E8E058b399f8aA5216Aa2602C7a52"
+call_contract = "0xDC2efB75b67528C9C04fdFA6CB2795f12bC1D72d"
 rpc_addr = "https://api.avax-test.network/ext/bc/C/rpc"
 ws_addr = "wss://api.avax-test.network/ext/bc/C/rpc"
 start_with_bridge = false
 
 [[relayer_evm]]
 name = "Linea_Testnet"
-call_contract = "0x10A69f82Ed4E8E058b399f8aA5216Aa2602C7a52"
+call_contract = "0xDC2efB75b67528C9C04fdFA6CB2795f12bC1D72d"
 rpc_addr = "https://rpc.goerli.linea.build"
 ws_addr = "wss://rpc.goerli.linea.build"
-start_with_bridge = true
+start_with_bridge = false
